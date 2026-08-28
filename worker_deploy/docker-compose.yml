@@ -1,0 +1,14 @@
+services:
+  worker:
+    build: .
+    container_name: dist-worker
+    ports:
+      - "9900:9900"        # TCP: inference commands
+      - "9899:9899/udp"    # UDP: auto-discovery
+    volumes:
+      - worker-cache:/root/.dist_inference_cache  # persist cached model components across restarts
+    restart: unless-stopped
+
+volumes:
+  worker-cache:
+    driver: local

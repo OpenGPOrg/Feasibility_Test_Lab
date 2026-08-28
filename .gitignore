@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pt
+qwen3-moe-tiny/
+model_cache/*
+!model_cache/.gitkeep

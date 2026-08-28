@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Docker Compose for Distributed Inference Worker Node
+#
+# Usage:
+#   docker compose -f docker-compose.worker.yml up -d
+#
+# This runs the worker with:
+#   - TCP port 9900 exposed for inference commands
+#   - UDP port 9899 exposed for auto-discovery
+#   - Persistent volume for cached model components (survives restarts)
+#   - Automatic restart on failure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+    container_name: dist-worker
+    ports:
+      - "9900:9900"        # TCP: inference commands
+      - "9899:9899/udp"    # UDP: auto-discovery
+    volumes:
+      - worker-cache:/root/.dist_inference_cache  # persist cached components
+    restart: unless-stopped
+    # Uncomment below for VPN (host networking gives full network access):
+    # network_mode: host
+
+volumes:
+  worker-cache:
+    driver: local
