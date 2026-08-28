@@ -81,6 +81,73 @@ def fmt_params(n):
     if n >= 1e3: return f"{n/1e3:.2f} K"
     return str(n)
 
+def compress_comp_list(comps):
+    """Compress list of components into readable ranges (e.g. 'layers 0-23, attn 24-30')."""
+    if not comps: return "(none)"
+    import re
+
+    groups = {
+        "layer": [],
+        "attn": [],
+        "ffn": [],
+        "ffn_only": [],
+        "attn_only": [],
+        "other": []
+    }
+
+    for c in comps:
+        m = re.match(r"^layer_(\d+)$", c)
+        if m:
+            groups["layer"].append(int(m.group(1)))
+            continue
+        m = re.match(r"^attn_(\d+)$", c)
+        if m:
+            groups["attn"].append(int(m.group(1)))
+            continue
+        m = re.match(r"^ffn_(\d+)$", c)
+        if m:
+            groups["ffn"].append(int(m.group(1)))
+            continue
+        m = re.match(r"^layer_(\d+)\(ffn only\)$", c)
+        if m:
+            groups["ffn_only"].append(int(m.group(1)))
+            continue
+        m = re.match(r"^layer_(\d+)\(attn only\)$", c)
+        if m:
+            groups["attn_only"].append(int(m.group(1)))
+            continue
+        groups["other"].append(c)
+
+    parts = []
+
+    def format_runs(nums, prefix, suffix=""):
+        if not nums: return []
+        nums = sorted(nums)
+        runs = []
+        start = end = nums[0]
+        for n in nums[1:]:
+            if n == end + 1:
+                end = n
+            else:
+                runs.append((start, end))
+                start = end = n
+        runs.append((start, end))
+        res = []
+        for s, e in runs:
+            if s == e:
+                res.append(f"{prefix}{s}{suffix}")
+            else:
+                res.append(f"{prefix}{s}-{e}{suffix}")
+        return res
+
+    parts.extend(format_runs(groups["layer"], "layers "))
+    parts.extend(format_runs(groups["attn"], "attn "))
+    parts.extend(format_runs(groups["ffn"], "ffn "))
+    parts.extend(format_runs(groups["ffn_only"], "layers ", "(ffn only)"))
+    parts.extend(format_runs(groups["attn_only"], "layers ", "(attn only)"))
+    parts.extend(groups["other"])
+    return ", ".join(parts)
+
 def hdr(t):
     print(f"\n{C.H}{'═'*58}\n  {t}\n{'═'*58}{C.RS}")
 
@@ -352,11 +419,15 @@ class DistributedModel:
             )
         else:
             print(f"  {C.CY}Loading model to CPU ({dtype_str})...{C.RS}")
-            self.model = AutoModelForCausalLM.from_pretrained(str(model_dir), torch_dtype=dtype)
-
         self.model.eval()
+        try:
+            p = next(self.model.parameters())
+            self.local_device = p.device
+        except Exception:
+            self.local_device = torch.device("cpu")
+
         size_mb = sum(p.numel() * p.element_size() for p in self.model.parameters()) / (1024**2)
-        print(f"  {C.OK} Model loaded ({size_mb:.1f} MB in memory)")
+        print(f"  {C.OK} Model loaded ({size_mb:.1f} MB in memory on {self.local_device})")
 
         # Extract references to sub-modules
         inner = self.model.model if hasattr(self.model, "model") else self.model.transformer
@@ -815,8 +886,9 @@ class DistributedModel:
         kv_per_token = 2 * self.num_layers * self.num_kv_heads * self.head_dim * self.dtype_size
         kv_total = kv_per_token * total_seq
 
-        # Display stats
-        self._display_stats({
+        # Decode full response text for auditing
+        output_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        stats_dict = {
             "num_input": num_input, "num_output": num_output,
             "total_seq": total_seq, "ttft": ttft,
             "decode_time": decode_time, "total_time": total_time,
@@ -824,7 +896,13 @@ class DistributedModel:
             "net_sent": net_sent, "net_recv": net_recv,
             "kv_total": kv_total, "kv_per_token": kv_per_token,
             "vram_before": vram_before, "vram_after": vram_after,
-        })
+        }
+
+        # Display stats
+        self._display_stats(stats_dict)
+
+        # Append detailed audit log report
+        self._audit_log_report(stats_dict, prompt, output_text, temperature)
 
     def _forward_pass(self, input_ids_or_embeds, is_prefill):
         """One forward pass through all components."""
@@ -841,9 +919,9 @@ class DistributedModel:
                 })
                 hidden = resp["hidden_states"].to(device)
             else:
-                hidden = self.embedding(input_ids_or_embeds)
+                hidden = self.embedding(input_ids_or_embeds.to(device))
         else:
-            hidden = input_ids_or_embeds
+            hidden = input_ids_or_embeds.to(device)
 
         # 2. Position info
         seq_len = hidden.shape[1]
@@ -1221,6 +1299,131 @@ class DistributedModel:
                 net_rows.append([f"  {nlabel} ↑sent", fmt_bytes(ns["sent"])])
                 net_rows.append([f"  {nlabel} ↓recv", fmt_bytes(ns["recv"])])
         print(tabulate(net_rows, tablefmt="rounded_outline", colalign=("left", "right")))
+
+    def _audit_log_report(self, s, prompt, output_text, temperature):
+        """Append a full audit report of this inference run to inference_audit.log."""
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        total_params = sum(p.numel() for p in self.model.parameters()) if self.model else 0
+        total_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters()) if self.model else 0
+        dtype_str = getattr(next(self.model.parameters()), "dtype", "unknown") if self.model else "?"
+
+        quant_mode = getattr(self, "quant", "none")
+        quant_str = {
+            "4bit": "4-bit NF4 Quantization (BitsAndBytes)",
+            "8bit": "8-bit Quantization (BitsAndBytes)",
+            "int8": "8-bit Dynamic Quantization (PyTorch native int8)",
+            "none": f"Full Precision ({dtype_str})",
+        }.get(quant_mode, quant_mode)
+
+        arch_desc = f"MoE ({self.num_experts} experts, top-{self.num_experts_per_tok} active/tok)" if self.is_moe else "Dense Transformer"
+
+        prefill_tps = s["num_input"] / s["ttft"] if s["ttft"] > 0 else 0
+        decode_tps = ((s["num_output"] - 1) / s["decode_time"]
+                      if s["decode_time"] > 0 and s["num_output"] > 1 else 0)
+
+        # Build Node / Split topology
+        summary = self.get_assignment_summary()
+        split_lines = []
+        for nlabel, comps in summary.items():
+            comp_str = compress_comp_list(comps)
+            split_lines.append(f"  • {nlabel}:\n    Allocated: {comp_str}")
+        split_block = "\n".join(split_lines) if split_lines else "  • Fully Local Execution"
+
+        # Per-node network transfer breakdown
+        node_stats = defaultdict(lambda: {"sent": 0, "recv": 0})
+        for info in self.assignments.values():
+            n = info["node"]
+            node_stats[n.label]["sent"] = n.bytes_sent
+            node_stats[n.label]["recv"] = n.bytes_received
+        net_lines = []
+        for nlabel, ns in node_stats.items():
+            net_lines.append(f"  • {nlabel}: Sent: {fmt_bytes(ns['sent'])}, Received: {fmt_bytes(ns['recv'])}")
+        net_block = "\n".join(net_lines) if net_lines else "  • Fully Local Execution (0 network bytes)"
+
+        # Token latency distribution
+        lat_lines = []
+        if s.get("token_times"):
+            import statistics
+            lat_lines.append(f"Per-token Latency (Avg):    {fmt_time(statistics.mean(s['token_times']))}")
+            lat_lines.append(f"Per-token Latency (Min):    {fmt_time(min(s['token_times']))}")
+            lat_lines.append(f"Per-token Latency (Max):    {fmt_time(max(s['token_times']))}")
+            if len(s['token_times']) > 4:
+                sorted_t = sorted(s['token_times'])
+                p50 = sorted_t[int(len(sorted_t) * 0.50)]
+                p90 = sorted_t[int(len(sorted_t) * 0.90)]
+                p99 = sorted_t[int(len(sorted_t) * 0.99)]
+                lat_lines.append(f"Per-token Latency (P50):    {fmt_time(p50)}")
+                lat_lines.append(f"Per-token Latency (P90):    {fmt_time(p90)}")
+                lat_lines.append(f"Per-token Latency (P99):    {fmt_time(p99)}")
+        lat_block = "\n".join(lat_lines) if lat_lines else "N/A"
+
+        report = f"""================================================================================
+INFERENCE AUDIT REPORT — {now_str}
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     {self.model_id}
+Architecture:        {arch_desc}
+Quantization Mode:   {quant_str}
+Precision Base:      {dtype_str}
+Total Parameters:    {total_params:,} ({fmt_params(total_params)})
+Total Memory in RAM: {fmt_bytes(total_bytes)}
+Dimensions:          Layers: {self.num_layers}, Hidden Size: {self.hidden_size}, KV Heads: {self.num_kv_heads}, Head Dim: {self.head_dim}
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+{split_block}
+
+[3] PROMPT & GENERATION
+--------------------------------------------------------------------------------
+Temperature:         {temperature}
+Prompt:              {prompt}
+Prompt Tokens:       {s['num_input']} tokens
+Generated Tokens:    {s['num_output']} tokens
+Total Sequence:      {s['total_seq']} tokens
+
+Generated Response:
+--------------------------------------------------------------------------------
+{output_text.strip()}
+--------------------------------------------------------------------------------
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): {fmt_time(s['ttft'])} (Prefill: {prefill_tps:.1f} tok/s)
+Decode Time:                {fmt_time(s['decode_time'])} (Decode: {decode_tps:.1f} tok/s)
+Total End-to-End Latency:   {fmt_time(s['total_time'])}
+{lat_block}
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            {fmt_bytes(s['net_sent'])}
+Total Data Received:        {fmt_bytes(s['net_recv'])}
+Total Network I/O:          {fmt_bytes(s['net_sent'] + s['net_recv'])}
+Avg Network Rate:           {(s['net_sent'] + s['net_recv']) / max(s['total_time'], 0.001) / (1024**2):.2f} MB/s
+
+Node Breakdown:
+{net_block}
+
+[6] HARDWARE & MEMORY FOOTPRINT
+--------------------------------------------------------------------------------
+Local Device:               {self.local_device}
+GPU VRAM Before:            {fmt_bytes(s['vram_before'])}
+GPU VRAM After:             {fmt_bytes(s['vram_after'])}
+GPU VRAM Delta:             {fmt_bytes(max(s['vram_after'] - s['vram_before'], 0))}
+KV Cache per Token (est):   {fmt_bytes(s['kv_per_token'])}
+KV Cache Total (est):       {fmt_bytes(s['kv_total'])}
+================================================================================
+"""
+        log_file = Path("inference_audit.log")
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(report + "\n")
+            print(f"  {C.OK} Inference audit report saved to {C.B}{log_file}{C.RS}")
+        except Exception as e:
+            print(f"  {C.WN} Failed to write audit log: {e}")
 
     def cleanup(self):
         """Unload all remote components and close connections."""
@@ -1682,71 +1885,7 @@ class CLI:
         return sorted(indices)
 
     def _compress_comp_list(self, comps):
-        """Compress list of components into readable ranges (e.g. 'layers 0-23, attn 24-30')."""
-        if not comps: return "(none)"
-        import re
-
-        groups = {
-            "layer": [],
-            "attn": [],
-            "ffn": [],
-            "ffn_only": [],
-            "attn_only": [],
-            "other": []
-        }
-
-        for c in comps:
-            m = re.match(r"^layer_(\d+)$", c)
-            if m:
-                groups["layer"].append(int(m.group(1)))
-                continue
-            m = re.match(r"^attn_(\d+)$", c)
-            if m:
-                groups["attn"].append(int(m.group(1)))
-                continue
-            m = re.match(r"^ffn_(\d+)$", c)
-            if m:
-                groups["ffn"].append(int(m.group(1)))
-                continue
-            m = re.match(r"^layer_(\d+)\(ffn only\)$", c)
-            if m:
-                groups["ffn_only"].append(int(m.group(1)))
-                continue
-            m = re.match(r"^layer_(\d+)\(attn only\)$", c)
-            if m:
-                groups["attn_only"].append(int(m.group(1)))
-                continue
-            groups["other"].append(c)
-
-        parts = []
-
-        def format_runs(nums, prefix, suffix=""):
-            if not nums: return []
-            nums = sorted(nums)
-            runs = []
-            start = end = nums[0]
-            for n in nums[1:]:
-                if n == end + 1:
-                    end = n
-                else:
-                    runs.append((start, end))
-                    start = end = n
-            runs.append((start, end))
-            res = []
-            for s, e in runs:
-                if s == e:
-                    res.append(f"{prefix}{s}{suffix}")
-                else:
-                    res.append(f"{prefix}{s}-{e}{suffix}")
-            return res
-
-        parts.extend(format_runs(groups["layer"], "layers "))
-        parts.extend(format_runs(groups["attn"], "attn "))
-        parts.extend(format_runs(groups["ffn"], "ffn "))
-        parts.extend(format_runs(groups["ffn_only"], "layers ", "(ffn only)"))
-        parts.extend(format_runs(groups["attn_only"], "layers ", "(attn only)"))
-        parts.extend(groups["other"])
-        return ", ".join(parts)
+        return compress_comp_list(comps)
 
     # ── Inference ─────────────────────────────────────────────────────────
     def _inference_menu(self):
