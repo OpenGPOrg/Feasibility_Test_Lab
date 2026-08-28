@@ -1253,6 +1253,7 @@ class CLI:
             data = {
                 "model": self.selected_model,
                 "model_dir": str(self.model_dir) if self.model_dir else None,
+                "quant": getattr(self.dist_model, "quant", "none"),
                 "nodes": nodes_info,
             }
             with open(self.config_path, "w") as f:
@@ -1268,7 +1269,8 @@ class CLI:
                     if data.get("model") and data.get("model_dir"):
                         self.selected_model = data["model"]
                         self.model_dir = Path(data["model_dir"])
-                        self.dist_model.load_model(self.selected_model["id"], self.model_dir)
+                        quant = data.get("quant", "none")
+                        self.dist_model.load_model(self.selected_model["id"], self.model_dir, quant=quant)
                     # Reconnect saved nodes
                     saved_nodes = data.get("nodes", {})
                     for key, ninfo in saved_nodes.items():
@@ -1315,7 +1317,8 @@ class CLI:
         print(f"    RAM:  {psutil.virtual_memory().total/(1024**3):.1f} GB")
 
     def _main_menu(self):
-        model_lbl = f"{C.G}{self.selected_model['name']}{C.RS}" if self.selected_model else f"{C.D}None{C.RS}"
+        q_tag = f" ({self.dist_model.quant})" if (self.dist_model.model and getattr(self.dist_model, "quant", "none") != "none") else ""
+        model_lbl = f"{C.G}{self.selected_model['name']}{q_tag}{C.RS}" if self.selected_model else f"{C.D}None{C.RS}"
         nodes_lbl = f"{C.G}{len(self.nodes)} connected{C.RS}" if self.nodes else f"{C.D}0{C.RS}"
         ready = self.dist_model.is_distributed
 
