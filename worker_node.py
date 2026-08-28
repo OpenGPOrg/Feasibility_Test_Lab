@@ -378,6 +378,30 @@ class Worker:
         # Fall through to normal load
         return self._cmd_load(msg)
 
+def _match_dtype(tensor, module):
+    """Ensure tensor dtype matches the module parameter dtype."""
+    if tensor is None or not isinstance(tensor, torch.Tensor):
+        return tensor
+    try:
+        p = next(module.parameters())
+        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tensor.to(p.dtype)
+    except Exception:
+        pass
+    return tensor
+
+def _match_tuple_dtype(tup, module):
+    if tup is None:
+        return tup
+    try:
+        p = next(module.parameters())
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
+    except Exception:
+        pass
+    return tup
+
+
     # ── Forward Passes ────────────────────────────────────────────────────
     def _get_cache(self, comp_id):
         """Get or create a DynamicCache for a component."""
@@ -394,9 +418,9 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
-        hs = msg["hidden_states"]
+        hs = _match_dtype(msg["hidden_states"], module)
         pos_ids = msg.get("position_ids")
-        pos_emb = msg.get("position_embeddings")
+        pos_emb = _match_tuple_dtype(msg.get("position_embeddings"), module)
         cache = self._get_cache(comp_id)
 
         with torch.no_grad():
@@ -439,9 +463,9 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
-        hs = msg["hidden_states"]
+        hs = _match_dtype(msg["hidden_states"], module)
         pos_ids = msg.get("position_ids")
-        pos_emb = msg.get("position_embeddings")
+        pos_emb = _match_tuple_dtype(msg.get("position_embeddings"), module)
         cache = self._get_cache(comp_id)
 
         with torch.no_grad():
@@ -483,7 +507,7 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
-        hs = msg["hidden_states"]
+        hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
             out = module(hs)
         # MoE blocks return (output, router_logits); dense MLPs return tensor
@@ -498,7 +522,7 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
-        hs = msg["hidden_states"]
+        hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
             out = module(hs)
 
@@ -524,7 +548,7 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
-        hs = msg["hidden_states"]
+        hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
             logits = module(hs)
 

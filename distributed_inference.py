@@ -980,9 +980,36 @@ class DistributedModel:
         # Case 5: Fully local
         return self._local_layer(idx, layer, hidden, position_ids, pos_emb)
 
+def _match_dtype(tensor, module):
+    """Ensure tensor dtype matches the module parameter dtype."""
+    if tensor is None or not isinstance(tensor, torch.Tensor):
+        return tensor
+    try:
+        p = next(module.parameters())
+        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tensor.to(p.dtype)
+    except Exception:
+        pass
+    return tensor
+
+def _match_tuple_dtype(tup, module):
+    if tup is None:
+        return tup
+    try:
+        p = next(module.parameters())
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
+    except Exception:
+        pass
+    return tup
+
+
     def _local_layer(self, idx, layer, hidden, position_ids, pos_emb):
         """Run a layer fully locally with per-layer KV cache."""
         from transformers import DynamicCache
+
+        hidden = _match_dtype(hidden, layer)
+        pos_emb = _match_tuple_dtype(pos_emb, layer)
 
         if idx not in self.local_kv:
             self.local_kv[idx] = DynamicCache()
