@@ -148,6 +148,29 @@ def compress_comp_list(comps):
     parts.extend(groups["other"])
     return ", ".join(parts)
 
+def _match_dtype(tensor, module):
+    """Ensure tensor dtype matches the module parameter dtype."""
+    if tensor is None or not isinstance(tensor, torch.Tensor):
+        return tensor
+    try:
+        p = next(module.parameters())
+        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tensor.to(p.dtype)
+    except Exception:
+        pass
+    return tensor
+
+def _match_tuple_dtype(tup, module):
+    if tup is None:
+        return tup
+    try:
+        p = next(module.parameters())
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
+    except Exception:
+        pass
+    return tup
+
 def hdr(t):
     print(f"\n{C.H}{'═'*58}\n  {t}\n{'═'*58}{C.RS}")
 
@@ -979,30 +1002,6 @@ class DistributedModel:
 
         # Case 5: Fully local
         return self._local_layer(idx, layer, hidden, position_ids, pos_emb)
-
-def _match_dtype(tensor, module):
-    """Ensure tensor dtype matches the module parameter dtype."""
-    if tensor is None or not isinstance(tensor, torch.Tensor):
-        return tensor
-    try:
-        p = next(module.parameters())
-        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tensor.to(p.dtype)
-    except Exception:
-        pass
-    return tensor
-
-def _match_tuple_dtype(tup, module):
-    if tup is None:
-        return tup
-    try:
-        p = next(module.parameters())
-        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
-    except Exception:
-        pass
-    return tup
-
 
     def _local_layer(self, idx, layer, hidden, position_ids, pos_emb):
         """Run a layer fully locally with per-layer KV cache."""
