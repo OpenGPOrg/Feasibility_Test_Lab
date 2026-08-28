@@ -419,6 +419,7 @@ class DistributedModel:
             )
         else:
             print(f"  {C.CY}Loading model to CPU ({dtype_str})...{C.RS}")
+            self.model = AutoModelForCausalLM.from_pretrained(str(model_dir), torch_dtype=dtype)
         self.model.eval()
         try:
             p = next(self.model.parameters())
