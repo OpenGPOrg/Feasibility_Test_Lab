@@ -148,27 +148,33 @@ def compress_comp_list(comps):
     parts.extend(groups["other"])
     return ", ".join(parts)
 
+def _get_module_floating_dtype(module):
+    """Find the floating point dtype of a module's parameters or buffers."""
+    if module is None:
+        return None
+    for p in module.parameters():
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return p.dtype
+    for b in module.buffers():
+        if b.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return b.dtype
+    return None
+
 def _match_dtype(tensor, module):
-    """Ensure tensor dtype matches the module parameter dtype."""
+    """Ensure tensor dtype matches the module's active floating point dtype."""
     if tensor is None or not isinstance(tensor, torch.Tensor):
         return tensor
-    try:
-        p = next(module.parameters())
-        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tensor.to(p.dtype)
-    except Exception:
-        pass
+    dt = _get_module_floating_dtype(module)
+    if dt is not None and tensor.dtype != dt:
+        return tensor.to(dt)
     return tensor
 
 def _match_tuple_dtype(tup, module):
     if tup is None:
         return tup
-    try:
-        p = next(module.parameters())
-        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
-    except Exception:
-        pass
+    dt = _get_module_floating_dtype(module)
+    if dt is not None:
+        return tuple(t.to(dt) if isinstance(t, torch.Tensor) and t.dtype != dt else t for t in tup)
     return tup
 
 def hdr(t):

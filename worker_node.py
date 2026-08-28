@@ -378,27 +378,31 @@ class Worker:
         # Fall through to normal load
         return self._cmd_load(msg)
 
+def _get_module_floating_dtype(module):
+    """Find the floating point dtype of a module's parameters or buffers."""
+    for p in module.parameters():
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return p.dtype
+    for b in module.buffers():
+        if b.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return b.dtype
+    return None
+
 def _match_dtype(tensor, module):
-    """Ensure tensor dtype matches the module parameter dtype."""
+    """Ensure tensor dtype matches the module's active floating point dtype."""
     if tensor is None or not isinstance(tensor, torch.Tensor):
         return tensor
-    try:
-        p = next(module.parameters())
-        if tensor.dtype != p.dtype and p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tensor.to(p.dtype)
-    except Exception:
-        pass
+    dt = _get_module_floating_dtype(module)
+    if dt is not None and tensor.dtype != dt:
+        return tensor.to(dt)
     return tensor
 
 def _match_tuple_dtype(tup, module):
     if tup is None:
         return tup
-    try:
-        p = next(module.parameters())
-        if p.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return tuple(t.to(p.dtype) if isinstance(t, torch.Tensor) and t.dtype != p.dtype else t for t in tup)
-    except Exception:
-        pass
+    dt = _get_module_floating_dtype(module)
+    if dt is not None:
+        return tuple(t.to(dt) if isinstance(t, torch.Tensor) and t.dtype != dt else t for t in tup)
     return tup
 
 
@@ -411,6 +415,43 @@ def _match_tuple_dtype(tup, module):
             cache = DynamicCache()
             self.kv_caches[comp_id] = cache
         return cache
+
+    def _run_module_safe(self, module, hs, pos_emb, kwargs):
+        """Execute a module with multi-stage signature handling and automatic dtype mismatch recovery."""
+        try:
+            return module(hs, **kwargs)
+        except TypeError as e:
+            if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
+                kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
+                try:
+                    return module(hs, **kwargs)
+                except TypeError:
+                    kwargs.pop("position_embeddings", None)
+                    try:
+                        return module(hs, **kwargs)
+                    except TypeError:
+                        kwargs.pop("attention_mask", None)
+                        return module(hs, **kwargs)
+            else:
+                kwargs.pop("position_embeddings", None)
+                try:
+                    return module(hs, **kwargs)
+                except TypeError:
+                    kwargs.pop("attention_mask", None)
+                    return module(hs, **kwargs)
+        except RuntimeError as e:
+            if "must have the same dtype" in str(e) or "expected dtype" in str(e):
+                for dt in (torch.bfloat16, torch.float16, torch.float32):
+                    if hs.dtype == dt:
+                        continue
+                    try:
+                        fallback_hs = hs.to(dt)
+                        if pos_emb is not None:
+                            kwargs["position_embeddings"] = tuple(p.to(dt) if isinstance(p, torch.Tensor) else p for p in pos_emb)
+                        return module(fallback_hs, **kwargs)
+                    except Exception:
+                        continue
+            raise
 
     def _cmd_forward_layer(self, msg):
         comp_id = msg["component_id"]
@@ -427,27 +468,7 @@ def _match_tuple_dtype(tup, module):
             kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
             if pos_emb is not None:
                 kwargs["position_embeddings"] = pos_emb
-            try:
-                outputs = module(hs, **kwargs)
-            except TypeError as e:
-                if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                    kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
-                    try:
-                        outputs = module(hs, **kwargs)
-                    except TypeError:
-                        kwargs.pop("position_embeddings", None)
-                        try:
-                            outputs = module(hs, **kwargs)
-                        except TypeError:
-                            kwargs.pop("attention_mask", None)
-                            outputs = module(hs, **kwargs)
-                else:
-                    kwargs.pop("position_embeddings", None)
-                    try:
-                        outputs = module(hs, **kwargs)
-                    except TypeError:
-                        kwargs.pop("attention_mask", None)
-                        outputs = module(hs, **kwargs)
+            outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
 
         hidden_out = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
         # Update cache reference (DynamicCache is mutated in-place, but just in case)
@@ -472,27 +493,7 @@ def _match_tuple_dtype(tup, module):
             kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
             if pos_emb is not None:
                 kwargs["position_embeddings"] = pos_emb
-            try:
-                outputs = module(hs, **kwargs)
-            except TypeError as e:
-                if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                    kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
-                    try:
-                        outputs = module(hs, **kwargs)
-                    except TypeError:
-                        kwargs.pop("position_embeddings", None)
-                        try:
-                            outputs = module(hs, **kwargs)
-                        except TypeError:
-                            kwargs.pop("attention_mask", None)
-                            outputs = module(hs, **kwargs)
-                else:
-                    kwargs.pop("position_embeddings", None)
-                    try:
-                        outputs = module(hs, **kwargs)
-                    except TypeError:
-                        kwargs.pop("attention_mask", None)
-                        outputs = module(hs, **kwargs)
+            outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
 
         attn_out = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
         if not isinstance(outputs, torch.Tensor) and len(outputs) > 2 and outputs[2] is not None:
