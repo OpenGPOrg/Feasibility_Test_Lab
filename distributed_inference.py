@@ -878,8 +878,6 @@ class DistributedModel:
         kv_per_token = 2 * self.num_layers * self.num_kv_heads * self.head_dim * self.dtype_size
         kv_total = kv_per_token * total_seq
 
-        # Decode full response text for auditing
-        output_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         stats_dict = {
             "num_input": num_input, "num_output": num_output,
             "total_seq": total_seq, "ttft": ttft,
@@ -893,8 +891,8 @@ class DistributedModel:
         # Display stats
         self._display_stats(stats_dict)
 
-        # Append detailed audit log report
-        self._audit_log_report(stats_dict, prompt, output_text, temperature)
+        # Append detailed audit log report (without prompt/response text)
+        self._audit_log_report(stats_dict, temperature)
 
     def _forward_pass(self, input_ids_or_embeds, is_prefill):
         """One forward pass through all components."""
@@ -1292,7 +1290,7 @@ class DistributedModel:
                 net_rows.append([f"  {nlabel} ↓recv", fmt_bytes(ns["recv"])])
         print(tabulate(net_rows, tablefmt="rounded_outline", colalign=("left", "right")))
 
-    def _audit_log_report(self, s, prompt, output_text, temperature):
+    def _audit_log_report(self, s, temperature):
         """Append a full audit report of this inference run to inference_audit.log."""
         import datetime
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1369,18 +1367,12 @@ Dimensions:          Layers: {self.num_layers}, Hidden Size: {self.hidden_size},
 --------------------------------------------------------------------------------
 {split_block}
 
-[3] PROMPT & GENERATION
+[3] GENERATION METADATA
 --------------------------------------------------------------------------------
 Temperature:         {temperature}
-Prompt:              {prompt}
-Prompt Tokens:       {s['num_input']} tokens
-Generated Tokens:    {s['num_output']} tokens
-Total Sequence:      {s['total_seq']} tokens
-
-Generated Response:
---------------------------------------------------------------------------------
-{output_text.strip()}
---------------------------------------------------------------------------------
+Prompt Tokens:       {s['num_input']:,} tokens
+Generated Tokens:    {s['num_output']:,} tokens
+Total Sequence:      {s['total_seq']:,} tokens
 
 [4] LATENCY & THROUGHPUT METRICS
 --------------------------------------------------------------------------------
