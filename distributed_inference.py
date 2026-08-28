@@ -921,22 +921,30 @@ class DistributedModel:
         if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = 0
 
-        kwargs = dict(position_ids=position_ids, past_key_values=cache, use_cache=True)
+        kwargs = dict(position_ids=position_ids, past_key_values=cache, use_cache=True, attention_mask=None)
         if pos_emb is not None:
             kwargs["position_embeddings"] = pos_emb
         try:
             outputs = layer(hidden, **kwargs)
         except TypeError as e:
             if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                kwargs["past_key_value"] = kwargs.pop("past_key_values")
+                kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
                 try:
                     outputs = layer(hidden, **kwargs)
                 except TypeError:
                     kwargs.pop("position_embeddings", None)
-                    outputs = layer(hidden, **kwargs)
+                    try:
+                        outputs = layer(hidden, **kwargs)
+                    except TypeError:
+                        kwargs.pop("attention_mask", None)
+                        outputs = layer(hidden, **kwargs)
             else:
                 kwargs.pop("position_embeddings", None)
-                outputs = layer(hidden, **kwargs)
+                try:
+                    outputs = layer(hidden, **kwargs)
+                except TypeError:
+                    kwargs.pop("attention_mask", None)
+                    outputs = layer(hidden, **kwargs)
 
         if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = orig_idx
@@ -1004,22 +1012,30 @@ class DistributedModel:
         if hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = 0
 
-        attn_kwargs = dict(position_ids=position_ids, past_key_values=cache, use_cache=True)
+        attn_kwargs = dict(position_ids=position_ids, past_key_values=cache, use_cache=True, attention_mask=None)
         if pos_emb is not None:
             attn_kwargs["position_embeddings"] = pos_emb
         try:
             attn_out = layer.self_attn(hidden, **attn_kwargs)
         except TypeError as e:
             if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                attn_kwargs["past_key_value"] = attn_kwargs.pop("past_key_values")
+                attn_kwargs["past_key_value"] = attn_kwargs.pop("past_key_values", None)
                 try:
                     attn_out = layer.self_attn(hidden, **attn_kwargs)
                 except TypeError:
                     attn_kwargs.pop("position_embeddings", None)
-                    attn_out = layer.self_attn(hidden, **attn_kwargs)
+                    try:
+                        attn_out = layer.self_attn(hidden, **attn_kwargs)
+                    except TypeError:
+                        attn_kwargs.pop("attention_mask", None)
+                        attn_out = layer.self_attn(hidden, **attn_kwargs)
             else:
                 attn_kwargs.pop("position_embeddings", None)
-                attn_out = layer.self_attn(hidden, **attn_kwargs)
+                try:
+                    attn_out = layer.self_attn(hidden, **attn_kwargs)
+                except TypeError:
+                    attn_kwargs.pop("attention_mask", None)
+                    attn_out = layer.self_attn(hidden, **attn_kwargs)
 
         if hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = orig_idx

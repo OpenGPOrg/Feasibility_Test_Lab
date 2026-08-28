@@ -400,22 +400,30 @@ class Worker:
         cache = self._get_cache(comp_id)
 
         with torch.no_grad():
-            kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True)
+            kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
             if pos_emb is not None:
                 kwargs["position_embeddings"] = pos_emb
             try:
                 outputs = module(hs, **kwargs)
             except TypeError as e:
                 if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                    kwargs["past_key_value"] = kwargs.pop("past_key_values")
+                    kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
                     try:
                         outputs = module(hs, **kwargs)
                     except TypeError:
                         kwargs.pop("position_embeddings", None)
-                        outputs = module(hs, **kwargs)
+                        try:
+                            outputs = module(hs, **kwargs)
+                        except TypeError:
+                            kwargs.pop("attention_mask", None)
+                            outputs = module(hs, **kwargs)
                 else:
                     kwargs.pop("position_embeddings", None)
-                    outputs = module(hs, **kwargs)
+                    try:
+                        outputs = module(hs, **kwargs)
+                    except TypeError:
+                        kwargs.pop("attention_mask", None)
+                        outputs = module(hs, **kwargs)
 
         hidden_out = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
         # Update cache reference (DynamicCache is mutated in-place, but just in case)
@@ -437,22 +445,30 @@ class Worker:
         cache = self._get_cache(comp_id)
 
         with torch.no_grad():
-            kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True)
+            kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
             if pos_emb is not None:
                 kwargs["position_embeddings"] = pos_emb
             try:
                 outputs = module(hs, **kwargs)
             except TypeError as e:
                 if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                    kwargs["past_key_value"] = kwargs.pop("past_key_values")
+                    kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
                     try:
                         outputs = module(hs, **kwargs)
                     except TypeError:
                         kwargs.pop("position_embeddings", None)
-                        outputs = module(hs, **kwargs)
+                        try:
+                            outputs = module(hs, **kwargs)
+                        except TypeError:
+                            kwargs.pop("attention_mask", None)
+                            outputs = module(hs, **kwargs)
                 else:
                     kwargs.pop("position_embeddings", None)
-                    outputs = module(hs, **kwargs)
+                    try:
+                        outputs = module(hs, **kwargs)
+                    except TypeError:
+                        kwargs.pop("attention_mask", None)
+                        outputs = module(hs, **kwargs)
 
         attn_out = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
         if not isinstance(outputs, torch.Tensor) and len(outputs) > 2 and outputs[2] is not None:
