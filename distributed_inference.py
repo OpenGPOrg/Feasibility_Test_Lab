@@ -1663,27 +1663,70 @@ class CLI:
         return sorted(indices)
 
     def _compress_comp_list(self, comps):
-        """Compress ['layer_0','layer_1','layer_2'] → 'layers 0-2'."""
+        """Compress list of components into readable ranges (e.g. 'layers 0-23, attn 24-30')."""
         if not comps: return "(none)"
-        # Find consecutive layer runs
-        layers = sorted([int(c.split("_")[1]) for c in comps if c.startswith("layer_") and c.count("_") == 1])
-        others = [c for c in comps if not (c.startswith("layer_") and c.count("_") == 1)]
+        import re
+
+        groups = {
+            "layer": [],
+            "attn": [],
+            "ffn": [],
+            "ffn_only": [],
+            "attn_only": [],
+            "other": []
+        }
+
+        for c in comps:
+            m = re.match(r"^layer_(\d+)$", c)
+            if m:
+                groups["layer"].append(int(m.group(1)))
+                continue
+            m = re.match(r"^attn_(\d+)$", c)
+            if m:
+                groups["attn"].append(int(m.group(1)))
+                continue
+            m = re.match(r"^ffn_(\d+)$", c)
+            if m:
+                groups["ffn"].append(int(m.group(1)))
+                continue
+            m = re.match(r"^layer_(\d+)\(ffn only\)$", c)
+            if m:
+                groups["ffn_only"].append(int(m.group(1)))
+                continue
+            m = re.match(r"^layer_(\d+)\(attn only\)$", c)
+            if m:
+                groups["attn_only"].append(int(m.group(1)))
+                continue
+            groups["other"].append(c)
 
         parts = []
-        if layers:
+
+        def format_runs(nums, prefix, suffix=""):
+            if not nums: return []
+            nums = sorted(nums)
             runs = []
-            start = layers[0]
-            end = layers[0]
-            for l in layers[1:]:
-                if l == end + 1:
-                    end = l
+            start = end = nums[0]
+            for n in nums[1:]:
+                if n == end + 1:
+                    end = n
                 else:
                     runs.append((start, end))
-                    start = end = l
+                    start = end = n
             runs.append((start, end))
+            res = []
             for s, e in runs:
-                parts.append(f"layers {s}-{e}" if s != e else f"layer_{s}")
-        parts.extend(others)
+                if s == e:
+                    res.append(f"{prefix}{s}{suffix}")
+                else:
+                    res.append(f"{prefix}{s}-{e}{suffix}")
+            return res
+
+        parts.extend(format_runs(groups["layer"], "layers "))
+        parts.extend(format_runs(groups["attn"], "attn "))
+        parts.extend(format_runs(groups["ffn"], "ffn "))
+        parts.extend(format_runs(groups["ffn_only"], "layers ", "(ffn only)"))
+        parts.extend(format_runs(groups["attn_only"], "layers ", "(attn only)"))
+        parts.extend(groups["other"])
         return ", ".join(parts)
 
     # ── Inference ─────────────────────────────────────────────────────────
