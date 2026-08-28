@@ -231,14 +231,16 @@ class NodeConnection:
         self._max_retries = 3
         self._retry_delay = 2  # seconds
 
-    def connect(self):
+    def connect(self, timeout=None):
         self.close()  # close any stale socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # TCP keepalive for VPN connections that may drop
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        self.sock.settimeout(300)  # generous timeout for VPN
+        self.sock.settimeout(timeout if timeout is not None else 300)
         self.sock.connect((self.host, self.port))
+        if timeout is not None:
+            self.sock.settimeout(300)
 
     def _reconnect(self):
         """Attempt to reconnect to the worker node."""
@@ -1458,21 +1460,24 @@ class CLI:
                         self.model_dir = Path(data["model_dir"])
                         quant = data.get("quant", "none")
                         self.dist_model.load_model(self.selected_model["id"], self.model_dir, quant=quant)
-                    # Reconnect saved nodes
+                    # Reconnect saved nodes (fast check, immediately drop if unreachable/ping fails)
                     saved_nodes = data.get("nodes", {})
                     for key, ninfo in saved_nodes.items():
                         try:
                             nc = NodeConnection(ninfo["host"], ninfo["port"], ninfo.get("hostname", "unknown"))
-                            nc.connect()
-                            resp = nc.send_cmd({"cmd": "info"})
-                            nc.hostname = resp.get("hostname", nc.hostname)
-                            nc.label = f"{nc.hostname} ({nc.host}:{nc.port})"
-                            self.nodes[key] = nc
-                            print(f"  {C.OK} Auto-connected node: {nc.label}")
+                            nc.connect(timeout=1.0)
+                            resp = nc.send_cmd({"cmd": "ping"})
+                            if resp and resp.get("status") == "ok":
+                                info_resp = nc.send_cmd({"cmd": "info"})
+                                nc.hostname = info_resp.get("hostname", nc.hostname)
+                                nc.label = f"{nc.hostname} ({nc.host}:{nc.port})"
+                                self.nodes[key] = nc
+                                print(f"  {C.OK} Connected node: {nc.label}")
+                            else:
+                                nc.close()
                         except Exception:
-                            # Worker may be offline, keep entry but disconnected
-                            nc = NodeConnection(ninfo["host"], ninfo["port"], ninfo.get("hostname", "unknown"))
-                            self.nodes[key] = nc
+                            # Node is offline/unreachable — immediately leave it
+                            pass
             except Exception:
                 pass
 
