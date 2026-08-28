@@ -782,17 +782,8 @@ class DistributedModel:
         return None
 
     def _remove_local_module(self, comp_type, layer_idx, expert_idx):
-        """Replace a sent module with a lightweight placeholder to free RAM."""
-        try:
-            if comp_type == "layer":
-                # Replace with None placeholder — forward will skip
-                self.layers[layer_idx] = None
-            elif comp_type == "expert":
-                layer = self.layers[layer_idx]
-                layer.mlp.experts[expert_idx] = None
-            # For attention/ffn, we keep the layer but know parts are remote
-        except Exception:
-            pass
+        """Keep local layers intact in memory to allow dynamic re-splitting and clearing assignments without reloading."""
+        pass
 
     # ── Distributed Forward Pass ──────────────────────────────────────────
     def generate(self, prompt, max_new_tokens=128, temperature=0.0):
