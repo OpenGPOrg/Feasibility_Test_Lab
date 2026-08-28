@@ -680,15 +680,9 @@ class DistributedModel:
             layer_idx = info.get("layer_idx")
             expert_idx = info.get("expert_idx")
 
-            if comp_id in self.sent_components:
-                # Already sent in this session
-                continue
-
             # Check if worker already has it in memory or auto-loaded from disk cache
             if comp_id in node_loaded_comps.get(id(node), set()):
                 print(f"  {C.OK} {comp_id} already cached on {node.label} for {self.model_id}, skipping transfer!")
-                self._remove_local_module(comp_type, layer_idx, expert_idx)
-                self.sent_components.add(comp_id)
                 continue
 
             # Extract the sub-module
@@ -720,14 +714,11 @@ class DistributedModel:
                 elapsed = time.perf_counter() - t0
                 size = resp.get("size_bytes", 0)
                 print(f"\r  {C.OK} Sent {comp_id} ({fmt_bytes(size)}) in {fmt_time(elapsed)}")
+                node_loaded_comps.setdefault(id(node), set()).add(comp_id)
             except Exception as e:
                 print(f"\r  {C.FL} Failed to send {comp_id}: {e}")
                 all_success = False
                 continue
-
-            # Remove from local model to free memory
-            self._remove_local_module(comp_type, layer_idx, expert_idx)
-            self.sent_components.add(comp_id)
 
         if not all_success:
             print(f"\n  {C.FL} Distribution incomplete: one or more components failed to transfer. Please retry Apply & Load.{C.RS}")
@@ -815,6 +806,36 @@ class DistributedModel:
     def generate(self, prompt, max_new_tokens=128, temperature=0.0):
         """Run distributed autoregressive generation."""
         device = self.local_device
+
+        # Verify that all assigned remote components are currently loaded on workers (auto-heal if worker restarted)
+        for cid, info in self.assignments.items():
+            node = info["node"]
+            try:
+                if not node.is_connected():
+                    node.connect()
+                chk = node.send_cmd({"cmd": "check_components", "model_id": self.model_id})
+                loaded_set = set(chk.get("loaded", []))
+                if cid not in loaded_set:
+                    comp_type = info["type"]
+                    layer_idx = info.get("layer_idx")
+                    expert_idx = info.get("expert_idx")
+                    module = self._extract_module(comp_type, layer_idx, expert_idx)
+                    if module is not None:
+                        if comp_type in ("layer", "attention") and hasattr(module, "self_attn"):
+                            attn = module.self_attn if comp_type == "layer" else module
+                            if hasattr(attn, "layer_idx"):
+                                attn.layer_idx = 0
+                        print(f"  {C.CY}Auto-loading missing {cid} to {node.label}...{C.RS}", end="", flush=True)
+                        node.send_cmd({
+                            "cmd": "load",
+                            "component_id": cid,
+                            "component_type": comp_type,
+                            "module": module,
+                            "model_id": self.model_id,
+                        })
+                        print(f"\r  {C.OK} Auto-loaded {cid} to {node.label}           ")
+            except Exception as e:
+                print(f"  {C.WN} Warning: could not verify {cid} on {node.label}: {e}")
 
         # Tokenize
         inputs = self.tokenizer(prompt, return_tensors="pt")
