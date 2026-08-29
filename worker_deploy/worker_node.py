@@ -240,6 +240,7 @@ class Worker:
                 "load_cached":       self._cmd_load_cached,
                 "unload":            self._cmd_unload,
                 "clear_kv":          self._cmd_clear_kv,
+                "get_memory":        self._cmd_get_memory,
                 "forward_layer":     self._cmd_forward_layer,
                 "forward_attention": self._cmd_forward_attention,
                 "forward_ffn":       self._cmd_forward_ffn,
@@ -329,6 +330,34 @@ class Worker:
             self.kv_caches = {k: None for k in self.kv_caches}
         return {"status": "ok"}
 
+    def _cmd_get_memory(self, msg):
+        """Return memory footprint of loaded layers, active KV caches, and process RSS/VRAM."""
+        layer_bytes = 0
+        for m in self.components.values():
+            try:
+                layer_bytes += sum(p.numel() * p.element_size() for p in m.parameters())
+            except Exception:
+                pass
+
+        kv_bytes = sum(get_kv_cache_size_bytes(c) for c in self.kv_caches.values())
+
+        ram_rss = 0
+        try:
+            import os
+            proc = psutil.Process(os.getpid())
+            ram_rss = proc.memory_info().rss
+        except Exception:
+            pass
+
+        vram_alloc = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        return {
+            "status": "ok",
+            "layer_bytes": layer_bytes,
+            "kv_bytes": kv_bytes,
+            "ram_rss": ram_rss,
+            "vram_alloc": vram_alloc,
+        }
+
     def _cmd_check_components(self, msg):
         """Report components loaded in memory for the requested model_id."""
         req_model = msg.get("model_id")
@@ -377,6 +406,40 @@ class Worker:
 
         # Fall through to normal load
         return self._cmd_load(msg)
+
+def get_kv_cache_size_bytes(cache):
+    """Calculate exact memory occupied by a DynamicCache or tuple KV cache."""
+    if cache is None:
+        return 0
+    total_bytes = 0
+    try:
+        if hasattr(cache, "layers"):
+            for layer in cache.layers:
+                if hasattr(layer, "keys") and isinstance(layer.keys, torch.Tensor):
+                    total_bytes += layer.keys.numel() * layer.keys.element_size()
+                if hasattr(layer, "values") and isinstance(layer.values, torch.Tensor):
+                    total_bytes += layer.values.numel() * layer.values.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
+            for k in cache.key_cache:
+                if isinstance(k, torch.Tensor):
+                    total_bytes += k.numel() * k.element_size()
+            for v in cache.value_cache:
+                if isinstance(v, torch.Tensor):
+                    total_bytes += v.numel() * v.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if isinstance(cache, (list, tuple)):
+            for item in cache:
+                if isinstance(item, torch.Tensor):
+                    total_bytes += item.numel() * item.element_size()
+                elif isinstance(item, (list, tuple)):
+                    total_bytes += get_kv_cache_size_bytes(item)
+            return total_bytes
+    except Exception:
+        pass
+    return total_bytes
 
 def _get_module_floating_dtype(module):
     """Find the floating point dtype of a module's parameters or buffers."""

@@ -148,6 +148,40 @@ def compress_comp_list(comps):
     parts.extend(groups["other"])
     return ", ".join(parts)
 
+def get_kv_cache_size_bytes(cache):
+    """Calculate exact memory occupied by a DynamicCache or tuple KV cache."""
+    if cache is None:
+        return 0
+    total_bytes = 0
+    try:
+        if hasattr(cache, "layers"):
+            for layer in cache.layers:
+                if hasattr(layer, "keys") and isinstance(layer.keys, torch.Tensor):
+                    total_bytes += layer.keys.numel() * layer.keys.element_size()
+                if hasattr(layer, "values") and isinstance(layer.values, torch.Tensor):
+                    total_bytes += layer.values.numel() * layer.values.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
+            for k in cache.key_cache:
+                if isinstance(k, torch.Tensor):
+                    total_bytes += k.numel() * k.element_size()
+            for v in cache.value_cache:
+                if isinstance(v, torch.Tensor):
+                    total_bytes += v.numel() * v.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if isinstance(cache, (list, tuple)):
+            for item in cache:
+                if isinstance(item, torch.Tensor):
+                    total_bytes += item.numel() * item.element_size()
+                elif isinstance(item, (list, tuple)):
+                    total_bytes += get_kv_cache_size_bytes(item)
+            return total_bytes
+    except Exception:
+        pass
+    return total_bytes
+
 def _get_module_floating_dtype(module):
     """Find the floating point dtype of a module's parameters or buffers."""
     if module is None:
@@ -931,6 +965,68 @@ class DistributedModel:
         kv_per_token = 2 * self.num_layers * self.num_kv_heads * self.head_dim * self.dtype_size
         kv_total = kv_per_token * total_seq
 
+        # Collect per-node memory stats (layers + active KV cache + process footprint)
+        node_mem_stats = {}
+
+        # 1. Local Master Node
+        local_layer_bytes = 0
+        assigned_ids = set(self.assignments.keys())
+        if "embedding" not in assigned_ids and self.embedding is not None:
+            local_layer_bytes += sum(p.numel() * p.element_size() for p in self.embedding.parameters())
+        if "lm_head" not in assigned_ids and self.lm_head is not None:
+            local_layer_bytes += sum(p.numel() * p.element_size() for p in self.lm_head.parameters())
+        if "lm_head" not in assigned_ids and self.norm is not None:
+            local_layer_bytes += sum(p.numel() * p.element_size() for p in self.norm.parameters())
+
+        for idx, layer in enumerate(self.layers):
+            if layer is None:
+                continue
+            lid = f"layer_{idx}"
+            aid = f"attn_{idx}"
+            fid = f"ffn_{idx}"
+            if lid in assigned_ids or (aid in assigned_ids and fid in assigned_ids):
+                continue
+            if aid in assigned_ids:
+                if hasattr(layer, "mlp") and layer.mlp is not None:
+                    local_layer_bytes += sum(p.numel() * p.element_size() for p in layer.mlp.parameters())
+                if hasattr(layer, "post_attention_layernorm") and layer.post_attention_layernorm is not None:
+                    local_layer_bytes += sum(p.numel() * p.element_size() for p in layer.post_attention_layernorm.parameters())
+            elif fid in assigned_ids:
+                if hasattr(layer, "self_attn") and layer.self_attn is not None:
+                    local_layer_bytes += sum(p.numel() * p.element_size() for p in layer.self_attn.parameters())
+                if hasattr(layer, "input_layernorm") and layer.input_layernorm is not None:
+                    local_layer_bytes += sum(p.numel() * p.element_size() for p in layer.input_layernorm.parameters())
+            else:
+                local_layer_bytes += sum(p.numel() * p.element_size() for p in layer.parameters())
+
+        local_kv_bytes = sum(get_kv_cache_size_bytes(c) for c in self.local_kv.values())
+        my_hostname = platform.node()
+        gpu_name = f" + {torch.cuda.get_device_name(0)}" if torch.cuda.is_available() else ""
+        local_label = f"Local: {my_hostname}{gpu_name}"
+
+        node_mem_stats[local_label] = {
+            "is_local": True,
+            "layer_bytes": local_layer_bytes,
+            "kv_bytes": local_kv_bytes,
+            "vram_delta": max(vram_after - vram_before, 0),
+            "vram_after": vram_after,
+        }
+
+        # 2. Remote Worker Nodes
+        for node in unique_nodes.values():
+            try:
+                resp = node.send_cmd({"cmd": "get_memory"})
+                if resp and resp.get("status") == "ok":
+                    node_mem_stats[node.label] = {
+                        "is_local": False,
+                        "layer_bytes": resp.get("layer_bytes", 0),
+                        "kv_bytes": resp.get("kv_bytes", 0),
+                        "ram_rss": resp.get("ram_rss", 0),
+                        "vram_alloc": resp.get("vram_alloc", 0),
+                    }
+            except Exception:
+                pass
+
         stats_dict = {
             "num_input": num_input, "num_output": num_output,
             "total_seq": total_seq, "ttft": ttft,
@@ -939,6 +1035,7 @@ class DistributedModel:
             "net_sent": net_sent, "net_recv": net_recv,
             "kv_total": kv_total, "kv_per_token": kv_per_token,
             "vram_before": vram_before, "vram_after": vram_after,
+            "node_mem_stats": node_mem_stats,
         }
 
         # Display stats
@@ -1324,6 +1421,30 @@ class DistributedModel:
             ]
         print(tabulate(mem_rows, tablefmt="rounded_outline", colalign=("left", "right")))
 
+        if s.get("node_mem_stats"):
+            shdr("MEMORY CONSUMPTION PER NODE (LAYERS + ACTIVE KV CACHE)")
+            mem_headers = ["Node", "Components", "Layer Memory", "KV Cache", "Memory Footprint"]
+            mem_table_rows = []
+            summary = self.get_assignment_summary()
+            for nlabel, mstats in s["node_mem_stats"].items():
+                comps = summary.get(nlabel, [])
+                comp_str = compress_comp_list(comps)
+                if mstats.get("is_local"):
+                    mem_footprint = f"{fmt_bytes(mstats.get('vram_after', 0))} (VRAM)" if mstats.get("vram_after", 0) > 0 else "Local RAM"
+                else:
+                    if mstats.get("vram_alloc", 0) > 0:
+                        mem_footprint = f"{fmt_bytes(mstats.get('vram_alloc', 0))} (VRAM)"
+                    else:
+                        mem_footprint = f"{fmt_bytes(mstats.get('ram_rss', 0))} (Process RAM)"
+                mem_table_rows.append([
+                    nlabel,
+                    comp_str,
+                    fmt_bytes(mstats.get("layer_bytes", 0)),
+                    fmt_bytes(mstats.get("kv_bytes", 0)),
+                    mem_footprint
+                ])
+            print(tabulate(mem_table_rows, headers=mem_headers, tablefmt="rounded_outline"))
+
         shdr("NETWORK TRANSFER")
         net_rows = [
             [f"{C.B}Data sent to remote nodes{C.RS}", f"{C.Y}{fmt_bytes(s['net_sent'])}{C.RS}"],
@@ -1388,6 +1509,24 @@ class DistributedModel:
             net_lines.append(f"  • {nlabel}: Sent: {fmt_bytes(ns['sent'])}, Received: {fmt_bytes(ns['recv'])}")
         net_block = "\n".join(net_lines) if net_lines else "  • Fully Local Execution (0 network bytes)"
 
+        # Per-node memory breakdown (Layers + Active KV cache + footprint)
+        node_mem_lines = []
+        for nlabel, mstats in s.get("node_mem_stats", {}).items():
+            comps = summary.get(nlabel, [])
+            comp_str = compress_comp_list(comps)
+            if mstats.get("is_local"):
+                footprint = f"{fmt_bytes(mstats.get('vram_after', 0))} (VRAM)" if mstats.get("vram_after", 0) > 0 else "Local RAM"
+            else:
+                footprint = f"{fmt_bytes(mstats.get('vram_alloc', 0))} (VRAM)" if mstats.get("vram_alloc", 0) > 0 else f"{fmt_bytes(mstats.get('ram_rss', 0))} (Process RAM)"
+            node_mem_lines.append(
+                f"  • {nlabel}:\n"
+                f"    - Assigned:      {comp_str}\n"
+                f"    - Layer Memory:  {fmt_bytes(mstats.get('layer_bytes', 0))}\n"
+                f"    - Active KV:     {fmt_bytes(mstats.get('kv_bytes', 0))}\n"
+                f"    - Total Footprint: {footprint}"
+            )
+        node_mem_block = "\n".join(node_mem_lines) if node_mem_lines else "  • N/A"
+
         # Token latency distribution
         lat_lines = []
         if s.get("token_times"):
@@ -1447,14 +1586,16 @@ Avg Network Rate:           {(s['net_sent'] + s['net_recv']) / max(s['total_time
 Node Breakdown:
 {net_block}
 
-[6] HARDWARE & MEMORY FOOTPRINT
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
 --------------------------------------------------------------------------------
 Local Device:               {self.local_device}
 GPU VRAM Before:            {fmt_bytes(s['vram_before'])}
 GPU VRAM After:             {fmt_bytes(s['vram_after'])}
 GPU VRAM Delta:             {fmt_bytes(max(s['vram_after'] - s['vram_before'], 0))}
-KV Cache per Token (est):   {fmt_bytes(s['kv_per_token'])}
 KV Cache Total (est):       {fmt_bytes(s['kv_total'])}
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+{node_mem_block}
 ================================================================================
 """
         log_file = Path("inference_audit.log")
