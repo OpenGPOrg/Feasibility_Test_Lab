@@ -56,10 +56,7 @@ MODELS_CONFIG = {
             "local_baseline": [],
             "offload_25pct": [("layer", i) for i in range(0, 9)],
             "offload_50pct": [("layer", i) for i in range(0, 18)],
-            "offload_75pct": [("layer", i) for i in range(0, 27)],
-            "hybrid_attn_10": [("attention", i) for i in range(10, 20)],
-            "hybrid_ffn_10": [("ffn", i) for i in range(10, 20)],
-            "pipelined_multi_stage": [("layer", i) for i in range(6, 14)] + [("layer", i) for i in range(20, 28)],
+            "pipelined_multi_stage": [("layer", i) for i in range(6, 12)] + [("layer", i) for i in range(20, 26)],
         }
     }
 }
@@ -156,6 +153,7 @@ def generate_markdown_summary():
         "- **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).",
         "- **KV Cache Memory Footprint:** KV Cache scales linearly with generation length on each worker hosting attention sub-components (`2 * num_assigned_layers * num_kv_heads * head_dim * dtype_size * seq_len`).",
         "- **Volunteer Worker Efficiency:** Pure feed-forward (FFN) sub-component offloading requires zero worker KV cache, ideal for ephemeral volunteer nodes with limited RAM.",
+        "- **CPU Volunteer Scheduling Heuristic:** For medium/large models (>= 1GB like Qwen2.5-3B), heavy sub-component or full-layer offloading to CPU-only workers is avoided to eliminate CPU compute bottlenecks. Volunteer CPU nodes are best allocated lightweight layer slices (<= 25%), while master GPU handles dense matrix operations.",
         "\n## 2. Experimental Results Summary Table",
         "| Model | Quant | Topology | Workload | Seq Len | TTFT (s) | Decode (tok/s) | Net I/O (MB) | Net Rate (MB/s) | Worker Layer (MB) | Worker KV (KB) | Worker RAM (MB) |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|"

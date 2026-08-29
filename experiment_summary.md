@@ -1,0 +1,139 @@
+# Distributed Volunteer Inference Experimental Evaluation Report
+
+**Total Runs Executed:** 150 | **Successful:** 125 | **Failed/OOM:** 25
+**Last Updated:** 2026-08-29 10:14:31
+
+## 1. Executive Summary & Key Findings
+- **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).
+- **KV Cache Memory Footprint:** KV Cache scales linearly with generation length on each worker hosting attention sub-components (`2 * num_assigned_layers * num_kv_heads * head_dim * dtype_size * seq_len`).
+- **Volunteer Worker Efficiency:** Pure feed-forward (FFN) sub-component offloading requires zero worker KV cache, ideal for ephemeral volunteer nodes with limited RAM.
+- **CPU Volunteer Scheduling Heuristic:** For medium/large models (>= 1GB like Qwen2.5-3B), heavy sub-component or full-layer offloading to CPU-only workers is avoided to eliminate CPU compute bottlenecks. Volunteer CPU nodes are best allocated lightweight layer slices (<= 25%), while master GPU handles dense matrix operations.
+
+## 2. Experimental Results Summary Table
+| Model | Quant | Topology | Workload | Seq Len | TTFT (s) | Decode (tok/s) | Net I/O (MB) | Net Rate (MB/s) | Worker Layer (MB) | Worker KV (KB) | Worker RAM (MB) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| SmolLM2-135M | none | `local_baseline` | short_short | 29 | 0.3785 | 31.91 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `local_baseline` | short_med | 88 | 0.0269 | 34.15 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `local_baseline` | med_med | 118 | 0.0388 | 35.77 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `local_baseline` | long_short | 108 | 0.0306 | 38.33 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `local_baseline` | long_long | 204 | 0.0306 | 35.83 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_25pct` | short_short | 29 | 0.4331 | 5.23 | 0.83 MB | 0.203 | 54.00 MB | 174.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_25pct` | short_med | 88 | 0.4455 | 5.29 | 2.82 MB | 0.183 | 54.00 MB | 528.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_25pct` | med_med | 118 | 1.1851 | 5.76 | 3.41 MB | 0.229 | 54.00 MB | 708.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_25pct` | long_short | 108 | 1.9168 | 5.77 | 2.45 MB | 0.403 | 54.00 MB | 648.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_25pct` | long_long | 204 | 1.835 | 7.92 | 5.65 MB | 0.335 | 54.00 MB | 1224.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_50pct` | short_short | 29 | 0.3383 | 3.42 | 1.55 MB | 0.264 | 101.25 MB | 326.25 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_50pct` | short_med | 88 | 0.8123 | 3.41 | 5.29 MB | 0.221 | 101.25 MB | 990.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_50pct` | med_med | 118 | 1.8457 | 3.46 | 6.39 MB | 0.259 | 101.25 MB | 1327.50 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_50pct` | long_short | 108 | 2.7622 | 3.41 | 4.59 MB | 0.468 | 101.25 MB | 1215.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_50pct` | long_long | 204 | 3.0143 | 3.29 | 10.60 MB | 0.27 | 101.25 MB | 2295.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_75pct` | short_short | 29 | 0.8594 | 2.27 | 2.38 MB | 0.258 | 155.25 MB | 500.25 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_75pct` | short_med | 88 | 1.133 | 2.23 | 8.11 MB | 0.222 | 155.25 MB | 1518.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_75pct` | med_med | 118 | 2.6588 | 2.25 | 9.80 MB | 0.26 | 155.25 MB | 2035.50 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_75pct` | long_short | 108 | 3.662 | 2.26 | 7.03 MB | 0.493 | 155.25 MB | 1863.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `offload_75pct` | long_long | 204 | 3.6081 | 2.17 | 16.25 MB | 0.278 | 155.25 MB | 3519.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_attn_10` | short_short | 29 | 0.2321 | 5.67 | 1.04 MB | 0.289 | 16.90 MB | 217.50 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_attn_10` | short_med | 88 | 0.4779 | 5.51 | 3.53 MB | 0.238 | 16.90 MB | 660.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_attn_10` | med_med | 118 | 1.2523 | 5.24 | 4.26 MB | 0.261 | 16.90 MB | 885.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_attn_10` | long_short | 108 | 1.932 | 5.55 | 3.06 MB | 0.489 | 16.90 MB | 810.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_attn_10` | long_long | 204 | 1.9915 | 5.43 | 7.07 MB | 0.296 | 16.90 MB | 1530.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_ffn_10` | short_short | 29 | 0.337 | 4.73 | 0.79 MB | 0.182 | 50.60 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_ffn_10` | short_med | 88 | 0.4772 | 6.09 | 2.62 MB | 0.195 | 50.60 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_ffn_10` | med_med | 118 | 1.3515 | 6.14 | 3.28 MB | 0.231 | 50.60 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_ffn_10` | long_short | 108 | 2.0154 | 5.7 | 2.57 MB | 0.413 | 50.60 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `hybrid_ffn_10` | long_long | 204 | 1.7829 | 6.19 | 5.53 MB | 0.263 | 50.60 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `pipelined_multi_stage` | short_short | 29 | 0.8363 | 3.59 | 1.45 MB | 0.236 | 94.50 MB | 304.50 KB | 0.0 MB |
+| SmolLM2-135M | none | `pipelined_multi_stage` | short_med | 88 | 0.6936 | 3.59 | 4.94 MB | 0.218 | 94.50 MB | 924.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `pipelined_multi_stage` | med_med | 118 | 1.8987 | 3.62 | 5.97 MB | 0.251 | 94.50 MB | 1239.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `pipelined_multi_stage` | long_short | 108 | 2.7193 | 3.67 | 4.28 MB | 0.462 | 94.50 MB | 1134.00 KB | 0.0 MB |
+| SmolLM2-135M | none | `pipelined_multi_stage` | long_long | 204 | 2.5844 | 3.55 | 9.89 MB | 0.274 | 94.50 MB | 2142.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `local_baseline` | short_short | 29 | 0.0434 | 24.36 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `local_baseline` | short_med | 88 | 0.0395 | 24.23 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `local_baseline` | med_med | 118 | 0.046 | 24.12 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `local_baseline` | long_short | 108 | 0.0521 | 24.38 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `local_baseline` | long_long | 204 | 0.0502 | 24.0 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_25pct` | short_short | 29 | 0.307 | 4.38 | 0.83 MB | 0.178 | 13.52 MB | 174.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_25pct` | short_med | 88 | 0.3979 | 4.4 | 2.82 MB | 0.154 | 13.52 MB | 528.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_25pct` | med_med | 118 | 1.3042 | 4.58 | 3.41 MB | 0.184 | 13.52 MB | 708.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_25pct` | long_short | 108 | 1.7605 | 4.64 | 2.45 MB | 0.353 | 13.52 MB | 648.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_25pct` | long_long | 204 | 1.8439 | 4.58 | 5.65 MB | 0.203 | 13.52 MB | 1224.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_50pct` | short_short | 29 | 0.574 | 2.72 | 1.55 MB | 0.206 | 25.35 MB | 326.25 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_50pct` | short_med | 88 | 0.5504 | 2.76 | 5.29 MB | 0.181 | 25.35 MB | 990.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_50pct` | med_med | 118 | 1.8377 | 2.7 | 6.39 MB | 0.206 | 25.35 MB | 1327.50 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_50pct` | long_short | 108 | 3.098 | 2.79 | 4.59 MB | 0.392 | 25.35 MB | 1215.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_50pct` | long_long | 204 | 2.7648 | 2.66 | 10.60 MB | 0.223 | 25.35 MB | 2295.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_75pct` | short_short | 29 | 0.8015 | 1.81 | 2.38 MB | 0.21 | 38.87 MB | 500.25 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_75pct` | short_med | 88 | 1.0511 | 1.81 | 8.11 MB | 0.181 | 38.87 MB | 1518.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_75pct` | med_med | 118 | 2.7297 | 1.81 | 9.80 MB | 0.211 | 38.87 MB | 2035.50 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_75pct` | long_short | 108 | 3.9571 | 1.84 | 7.03 MB | 0.414 | 38.87 MB | 1863.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `offload_75pct` | long_long | 204 | 3.4613 | 1.83 | 16.25 MB | 0.237 | 38.87 MB | 3519.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_attn_10` | short_short | 29 | 0.5003 | 5.2 | 1.04 MB | 0.249 | 4.20 MB | 217.50 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_attn_10` | short_med | 88 | 0.4603 | 5.25 | 3.53 MB | 0.228 | 4.20 MB | 660.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_attn_10` | med_med | 118 | 1.6072 | 5.26 | 4.26 MB | 0.257 | 4.20 MB | 885.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_attn_10` | long_short | 108 | 2.4347 | 5.15 | 3.06 MB | 0.431 | 4.20 MB | 810.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_attn_10` | long_long | 204 | 2.1309 | 4.99 | 7.07 MB | 0.272 | 4.20 MB | 1530.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_ffn_10` | short_short | 29 | 0.4418 | 5.63 | 0.79 MB | 0.208 | 12.70 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_ffn_10` | short_med | 88 | 0.3877 | 5.45 | 2.62 MB | 0.176 | 12.70 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_ffn_10` | med_med | 118 | 1.2729 | 5.34 | 3.28 MB | 0.204 | 12.70 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_ffn_10` | long_short | 108 | 1.8675 | 5.89 | 2.57 MB | 0.433 | 12.70 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `hybrid_ffn_10` | long_long | 204 | 1.855 | 5.49 | 5.53 MB | 0.235 | 12.70 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `pipelined_multi_stage` | short_short | 29 | 0.9241 | 2.51 | 1.45 MB | 0.171 | 23.66 MB | 304.50 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `pipelined_multi_stage` | short_med | 88 | 0.9011 | 2.49 | 4.94 MB | 0.151 | 23.66 MB | 924.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `pipelined_multi_stage` | med_med | 118 | 1.4231 | 2.4 | 5.97 MB | 0.174 | 23.66 MB | 1239.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `pipelined_multi_stage` | long_short | 108 | 3.8536 | 2.54 | 4.28 MB | 0.322 | 23.66 MB | 1134.00 KB | 0.0 MB |
+| SmolLM2-135M | 4bit | `pipelined_multi_stage` | long_long | 204 | 2.0024 | 2.49 | 9.89 MB | 0.199 | 23.66 MB | 2142.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `local_baseline` | short_short | 29 | 0.2298 | 12.05 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `local_baseline` | short_med | 88 | 0.1039 | 11.89 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `local_baseline` | med_med | 118 | 0.1167 | 10.56 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `local_baseline` | long_short | 108 | 0.1403 | 11.62 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `local_baseline` | long_long | 204 | 0.1054 | 11.75 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_25pct` | short_short | 29 | 0.9442 | 3.82 | 0.92 MB | 0.156 | 254.88 MB | 174.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_25pct` | short_med | 88 | 0.4541 | 3.72 | 3.11 MB | 0.143 | 254.88 MB | 528.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_25pct` | med_med | 118 | 1.2854 | 3.73 | 3.79 MB | 0.169 | 254.88 MB | 708.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_25pct` | long_short | 108 | 2.1881 | 3.93 | 2.80 MB | 0.338 | 254.88 MB | 648.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_25pct` | long_long | 204 | 1.7645 | 3.86 | 6.32 MB | 0.194 | 254.88 MB | 1224.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_50pct` | short_short | 29 | 0.7813 | 2.52 | 1.77 MB | 0.213 | 254.88 MB | 326.25 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_50pct` | short_med | 88 | 0.7279 | 2.53 | 5.96 MB | 0.186 | 254.88 MB | 990.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_50pct` | med_med | 118 | 1.8334 | 2.6 | 7.29 MB | 0.226 | 254.88 MB | 1327.5 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_50pct` | long_short | 108 | 2.8816 | 2.42 | 5.41 MB | 0.423 | 254.88 MB | 1215.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_50pct` | long_long | 204 | 2.8488 | 2.51 | 12.16 MB | 0.242 | 254.88 MB | 2295.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_75pct` | short_short | 29 | 1.2141 | 1.76 | 2.75 MB | 0.229 | 254.88 MB | 500.25 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_75pct` | short_med | 88 | 1.7909 | 1.76 | 9.26 MB | 0.198 | 254.88 MB | 1518.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_75pct` | med_med | 118 | 2.5183 | 1.77 | 11.34 MB | 0.241 | 254.88 MB | 2035.5 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_75pct` | long_short | 108 | 3.9391 | 1.79 | 8.44 MB | 0.487 | 254.88 MB | 1863.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `offload_75pct` | long_long | 204 | 3.6254 | 1.73 | 18.93 MB | 0.262 | 254.88 MB | 3519.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_attn_10` | short_short | 29 | 0.7021 | 3.87 | 1.04 MB | 0.184 | 254.88 MB | 217.5 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_attn_10` | short_med | 88 | 0.6377 | 4.01 | 3.53 MB | 0.173 | 254.88 MB | 660.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_attn_10` | med_med | 118 | 1.3545 | 3.82 | 4.26 MB | 0.194 | 254.88 MB | 885.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_attn_10` | long_short | 108 | 2.1982 | 3.91 | 3.06 MB | 0.367 | 254.88 MB | 810.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_attn_10` | long_long | 204 | 2.8552 | 3.73 | 7.07 MB | 0.203 | 254.88 MB | 1530.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_ffn_10` | short_short | 29 | 0.4877 | 3.9 | 0.79 MB | 0.148 | 254.88 MB | 0.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_ffn_10` | short_med | 88 | 0.7269 | 4.2 | 2.62 MB | 0.134 | 254.88 MB | 0.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_ffn_10` | med_med | 118 | 1.2133 | 4.06 | 3.28 MB | 0.159 | 254.88 MB | 0.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_ffn_10` | long_short | 108 | 2.1407 | 3.95 | 2.57 MB | 0.313 | 254.88 MB | 0.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `hybrid_ffn_10` | long_long | 204 | 1.986 | 4.14 | 5.53 MB | 0.18 | 254.88 MB | 0.0 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `pipelined_multi_stage` | short_short | 29 | 0.5807 | 2.27 | 1.44 MB | 0.162 | 47.32 MB | 304.50 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `pipelined_multi_stage` | short_med | 88 | 0.6747 | 2.23 | 4.92 MB | 0.137 | 47.32 MB | 924.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `pipelined_multi_stage` | med_med | 118 | 1.7855 | 2.16 | 5.95 MB | 0.155 | 47.32 MB | 1239.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `pipelined_multi_stage` | long_short | 108 | 2.3836 | 2.01 | 4.27 MB | 0.298 | 47.32 MB | 1134.00 KB | 0.0 MB |
+| SmolLM2-135M | 8bit | `pipelined_multi_stage` | long_long | 204 | 1.9618 | 2.18 | 9.87 MB | 0.174 | 47.32 MB | 2142.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `local_baseline` | short_short | 30 | 0.1438 | 13.41 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `local_baseline` | short_med | 88 | 0.0678 | 14.28 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `local_baseline` | med_med | 119 | 0.0838 | 16.84 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `local_baseline` | long_short | 110 | 0.0809 | 18.66 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `local_baseline` | long_long | 205 | 0.0717 | 16.13 | 0.00 MB | 0.0 | 0.00 MB | 0.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_25pct` | short_short | 30 | 1.5811 | 1.02 | 2.48 MB | 0.123 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_25pct` | short_med | 88 | 1.4963 | 1.05 | 7.76 MB | 0.101 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_25pct` | med_med | 119 | 4.2541 | 1.06 | 10.08 MB | 0.128 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_25pct` | long_short | 110 | 7.7109 | 1.04 | 8.54 MB | 0.277 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_25pct` | long_long | 205 | 8.4899 | 1.06 | 17.14 MB | 0.142 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_50pct` | short_short | 30 | 3.9119 | 0.41 | 6.66 MB | 0.131 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_50pct` | short_med | 88 | 4.1936 | 0.4 | 20.62 MB | 0.101 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_50pct` | med_med | 119 | 8.3585 | 0.4 | 27.07 MB | 0.132 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_50pct` | long_short | 110 | 15.8199 | 0.4 | 23.47 MB | 0.308 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_50pct` | long_long | 205 | 15.1921 | 0.4 | 46.23 MB | 0.147 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_75pct` | short_short | 30 | 7.472 | 0.31 | 8.58 MB | 0.124 | 3287.09 MB | 810.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_75pct` | short_med | 88 | 6.1613 | 0.31 | 26.68 MB | 0.101 | 3287.09 MB | 2376.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_75pct` | med_med | 119 | 11.8647 | 0.32 | 34.85 MB | 0.136 | 3287.09 MB | 3213.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_75pct` | long_short | 110 | 21.7947 | 0.32 | 29.89 MB | 0.312 | 3287.09 MB | 2970.0 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `offload_75pct` | long_long | 205 | 23.9604 | 0.3 | 59.39 MB | 0.141 | 3287.09 MB | 5535.0 KB | 0.0 MB |
