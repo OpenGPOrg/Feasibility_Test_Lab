@@ -267,11 +267,19 @@ def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
                 generate_markdown_summary()
 
             except Exception as err:
-                print(f"\n✗ STOPPING: {exp_id} FAILED: {err}")
-                traceback.print_exc()
+                print(f"\n✗ {exp_id} FAILED: {err}")
                 all_rows[idx]["error"] = str(err)
                 all_rows[idx]["status"] = "failed"
-                return
+                with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(all_rows)
+                generate_markdown_summary()
+                try:
+                    worker_node.connect(timeout=2.0)
+                except Exception:
+                    pass
+                continue
 
         dm.cleanup()
         del dm

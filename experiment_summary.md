@@ -1,7 +1,7 @@
 # Distributed Volunteer Inference Experimental Evaluation Report
 
-**Total Runs Executed:** 157 | **Successful:** 152 | **Failed/OOM:** 5
-**Last Updated:** 2026-08-29 11:39:26
+**Total Runs Executed:** 157 | **Successful:** 140 | **Failed/OOM:** 17
+**Last Updated:** 2026-08-29 12:06:51
 
 ## 1. Executive Summary & Key Findings
 - **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).
@@ -32,11 +32,6 @@
 | SmolLM2-135M | none | `offload_75pct` | med_med | 118 | 2.6588 | 2.25 | 9.80 MB | 0.26 | 155.25 MB | 2035.50 KB | 0.0 MB |
 | SmolLM2-135M | none | `offload_75pct` | long_short | 108 | 3.662 | 2.26 | 7.03 MB | 0.493 | 155.25 MB | 1863.00 KB | 0.0 MB |
 | SmolLM2-135M | none | `offload_75pct` | long_long | 204 | 3.6081 | 2.17 | 16.25 MB | 0.278 | 155.25 MB | 3519.00 KB | 0.0 MB |
-| SmolLM2-135M | none | `offload_all_layers` | short_short | 29 | 1.0953 | 1.74 | 3.10 MB | 0.258 | 202.50 MB | 652.50 KB | 0.0 MB |
-| SmolLM2-135M | none | `offload_all_layers` | short_med | 88 | 1.1757 | 1.83 | 10.57 MB | 0.238 | 202.50 MB | 1980.00 KB | 0.0 MB |
-| SmolLM2-135M | none | `offload_all_layers` | med_med | 118 | 3.1367 | 1.68 | 12.77 MB | 0.255 | 202.50 MB | 2655.00 KB | 0.0 MB |
-| SmolLM2-135M | none | `offload_all_layers` | long_short | 108 | 4.9149 | 1.61 | 9.17 MB | 0.463 | 202.50 MB | 2430.00 KB | 0.0 MB |
-| SmolLM2-135M | none | `offload_all_layers` | long_long | 204 | 5.1983 | 1.72 | 21.18 MB | 0.284 | 202.50 MB | 4590.00 KB | 0.0 MB |
 | SmolLM2-135M | none | `hybrid_attn_10` | short_short | 29 | 0.2321 | 5.67 | 1.04 MB | 0.289 | 16.88 MB | 217.50 KB | 0.0 MB |
 | SmolLM2-135M | none | `hybrid_attn_10` | short_med | 88 | 0.4779 | 5.51 | 3.53 MB | 0.238 | 16.88 MB | 660.00 KB | 0.0 MB |
 | SmolLM2-135M | none | `hybrid_attn_10` | med_med | 118 | 1.2523 | 5.24 | 4.26 MB | 0.261 | 16.88 MB | 885.00 KB | 0.0 MB |
@@ -72,11 +67,6 @@
 | SmolLM2-135M | 4bit | `offload_75pct` | med_med | 118 | 2.7297 | 1.81 | 9.80 MB | 0.211 | 38.87 MB | 2035.50 KB | 0.0 MB |
 | SmolLM2-135M | 4bit | `offload_75pct` | long_short | 108 | 3.9571 | 1.84 | 7.03 MB | 0.414 | 38.87 MB | 1863.00 KB | 0.0 MB |
 | SmolLM2-135M | 4bit | `offload_75pct` | long_long | 204 | 3.4613 | 1.83 | 16.25 MB | 0.237 | 38.87 MB | 3519.00 KB | 0.0 MB |
-| SmolLM2-135M | 4bit | `offload_all_layers` | short_short | 29 | 1.1215 | 1.71 | 3.10 MB | 0.252 | 50.70 MB | 652.50 KB | 0.0 MB |
-| SmolLM2-135M | 4bit | `offload_all_layers` | short_med | 88 | 1.1821 | 1.79 | 10.57 MB | 0.235 | 50.70 MB | 1980.00 KB | 0.0 MB |
-| SmolLM2-135M | 4bit | `offload_all_layers` | med_med | 118 | 3.1512 | 1.65 | 12.77 MB | 0.251 | 50.70 MB | 2655.00 KB | 0.0 MB |
-| SmolLM2-135M | 4bit | `offload_all_layers` | long_short | 108 | 4.9214 | 1.59 | 9.17 MB | 0.458 | 50.70 MB | 2430.00 KB | 0.0 MB |
-| SmolLM2-135M | 4bit | `offload_all_layers` | long_long | 204 | 5.2104 | 1.69 | 21.18 MB | 0.279 | 50.70 MB | 4590.00 KB | 0.0 MB |
 | SmolLM2-135M | 4bit | `hybrid_attn_10` | short_short | 29 | 0.5003 | 5.2 | 1.04 MB | 0.249 | 4.22 MB | 217.50 KB | 0.0 MB |
 | SmolLM2-135M | 4bit | `hybrid_attn_10` | short_med | 88 | 0.4603 | 5.25 | 3.53 MB | 0.228 | 4.22 MB | 660.00 KB | 0.0 MB |
 | SmolLM2-135M | 4bit | `hybrid_attn_10` | med_med | 118 | 1.6072 | 5.26 | 4.26 MB | 0.257 | 4.22 MB | 885.00 KB | 0.0 MB |
@@ -112,11 +102,6 @@
 | SmolLM2-135M | 8bit | `offload_75pct` | med_med | 118 | 2.5183 | 1.77 | 11.34 MB | 0.241 | 77.74 MB | 2035.50 KB | 0.0 MB |
 | SmolLM2-135M | 8bit | `offload_75pct` | long_short | 108 | 3.9391 | 1.79 | 8.44 MB | 0.487 | 77.74 MB | 1863.00 KB | 0.0 MB |
 | SmolLM2-135M | 8bit | `offload_75pct` | long_long | 204 | 3.6254 | 1.73 | 18.93 MB | 0.262 | 77.74 MB | 3519.00 KB | 0.0 MB |
-| SmolLM2-135M | 8bit | `offload_all_layers` | short_short | 29 | 1.1012 | 1.4 | 3.53 MB | 0.242 | 101.40 MB | 652.50 KB | 0.0 MB |
-| SmolLM2-135M | 8bit | `offload_all_layers` | short_med | 88 | 1.1925 | 1.4 | 11.92 MB | 0.21 | 101.40 MB | 1980.00 KB | 0.0 MB |
-| SmolLM2-135M | 8bit | `offload_all_layers` | med_med | 118 | 3.1681 | 1.4 | 14.58 MB | 0.247 | 101.40 MB | 2655.00 KB | 0.0 MB |
-| SmolLM2-135M | 8bit | `offload_all_layers` | long_short | 108 | 4.9312 | 1.3 | 10.82 MB | 0.435 | 101.40 MB | 2430.00 KB | 0.0 MB |
-| SmolLM2-135M | 8bit | `offload_all_layers` | long_long | 204 | 5.2215 | 1.3 | 24.32 MB | 0.247 | 101.40 MB | 4590.00 KB | 0.0 MB |
 | SmolLM2-135M | 8bit | `hybrid_attn_10` | short_short | 29 | 0.7021 | 3.87 | 1.04 MB | 0.184 | 8.45 MB | 217.50 KB | 0.0 MB |
 | SmolLM2-135M | 8bit | `hybrid_attn_10` | short_med | 88 | 0.6377 | 4.01 | 3.53 MB | 0.173 | 8.45 MB | 660.00 KB | 0.0 MB |
 | SmolLM2-135M | 8bit | `hybrid_attn_10` | med_med | 118 | 1.3545 | 3.82 | 4.26 MB | 0.194 | 8.45 MB | 885.00 KB | 0.0 MB |
@@ -152,8 +137,11 @@
 | Qwen2.5-3B | 4bit | `offload_75pct` | med_med | 119 | 11.8647 | 0.32 | 34.85 MB | 0.136 | 2465.37 MB | 3213.00 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `offload_75pct` | long_short | 110 | 21.7947 | 0.32 | 29.89 MB | 0.312 | 2465.37 MB | 2970.00 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `offload_75pct` | long_long | 205 | 23.9604 | 0.3 | 59.39 MB | 0.141 | 2465.37 MB | 5535.00 KB | 0.0 MB |
-| Qwen2.5-3B | 4bit | `offload_all_layers` | short_short | 30 | 8.3072 | 0.24 | 11.06 MB | 0.127 | 3287.16 MB | 1080.00 KB | 0.0 MB |
-| Qwen2.5-3B | 4bit | `offload_all_layers` | short_med | 88 | 6.4065 | 0.25 | 34.44 MB | 0.108 | 3287.16 MB | 3168.00 KB | 0.0 MB |
+| Qwen2.5-3B | 4bit | `hybrid_attn_10` | short_short | 30 | 1.5121 | 2.27 | 2.76 MB | 0.279 | 3287.04 MB | 290.0 KB | 5727.18 MB |
+| Qwen2.5-3B | 4bit | `hybrid_attn_10` | short_med | 88 | 0.8641 | 1.91 | 8.63 MB | 0.204 | 3287.04 MB | 870.0 KB | 5728.25 MB |
+| Qwen2.5-3B | 4bit | `hybrid_attn_10` | med_med | 119 | 2.6564 | 2.35 | 11.20 MB | 0.309 | 3287.04 MB | 1180.0 KB | 5736.88 MB |
+| Qwen2.5-3B | 4bit | `hybrid_attn_10` | long_short | 110 | 5.2327 | 2.87 | 9.49 MB | 0.698 | 3287.04 MB | 1090.0 KB | 5739.18 MB |
+| Qwen2.5-3B | 4bit | `hybrid_attn_10` | long_long | 205 | 5.0099 | 2.39 | 19.05 MB | 0.348 | 3287.04 MB | 2040.0 KB | 5739.88 MB |
 | Qwen2.5-3B | 4bit | `hybrid_ffn_10` | short_short | 30 | 2.3437 | 0.8 | 2.44 MB | 0.094 | 684.83 MB | 0.00 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `hybrid_ffn_10` | short_med | 88 | 1.9108 | 0.78 | 7.51 MB | 0.073 | 684.83 MB | 0.00 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `hybrid_ffn_10` | med_med | 119 | 5.2365 | 0.79 | 9.93 MB | 0.094 | 684.83 MB | 0.00 KB | 0.0 MB |
