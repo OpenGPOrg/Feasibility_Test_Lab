@@ -14583,3 +14583,1068 @@ Node Memory Breakdown (Layer Weights + Active KV Cache):
     - Total Footprint: 5.20 GB (Process RAM)
 ================================================================================
 
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:24:58
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   Full Precision (torch.bfloat16)
+Precision Base:      torch.bfloat16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 256.57 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       9 tokens
+Generated Tokens:    20 tokens
+Total Sequence:      29 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 1.184s (Prefill: 7.6 tok/s)
+Decode Time:                10.377s (Decode: 1.8 tok/s)
+Total End-to-End Latency:   11.561s
+Per-token Latency (Avg):    546.1ms
+Per-token Latency (Min):    368.4ms
+Per-token Latency (Max):    1.055s
+Per-token Latency (P50):    387.3ms
+Per-token Latency (P90):    1.005s
+Per-token Latency (P99):    1.055s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            1.92 MB
+Total Data Received:        1.18 MB
+Total Network I/O:          3.11 MB
+Avg Network Rate:           0.27 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 1.92 MB, Received: 1.18 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            256.59 MB
+GPU VRAM After:             265.34 MB
+GPU VRAM Delta:             8.75 MB
+KV Cache Total (est):       652.50 KB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  259.91 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 265.34 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  256.57 MB
+    - Active KV:     630.00 KB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:25:46
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   Full Precision (torch.bfloat16)
+Precision Base:      torch.bfloat16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 256.57 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       8 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      88 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 735.6ms (Prefill: 10.9 tok/s)
+Decode Time:                45.142s (Decode: 1.8 tok/s)
+Total End-to-End Latency:   45.878s
+Per-token Latency (Avg):    571.4ms
+Per-token Latency (Min):    361.1ms
+Per-token Latency (Max):    1.226s
+Per-token Latency (P50):    427.6ms
+Per-token Latency (P90):    1.008s
+Per-token Latency (P99):    1.226s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            6.68 MB
+Total Data Received:        3.91 MB
+Total Network I/O:          10.59 MB
+Avg Network Rate:           0.23 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 6.68 MB, Received: 3.91 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            264.72 MB
+GPU VRAM After:             265.34 MB
+GPU VRAM Delta:             643.50 KB
+KV Cache Total (est):       1.93 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  259.91 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 265.34 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  256.57 MB
+    - Active KV:     1.91 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:26:31
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   Full Precision (torch.bfloat16)
+Precision Base:      torch.bfloat16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 256.57 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       38 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      118 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 2.192s (Prefill: 17.3 tok/s)
+Decode Time:                41.832s (Decode: 1.9 tok/s)
+Total End-to-End Latency:   44.024s
+Per-token Latency (Avg):    529.5ms
+Per-token Latency (Min):    339.0ms
+Per-token Latency (Max):    1.105s
+Per-token Latency (P50):    378.2ms
+Per-token Latency (P90):    993.5ms
+Per-token Latency (P99):    1.105s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            7.89 MB
+Total Data Received:        4.90 MB
+Total Network I/O:          12.79 MB
+Avg Network Rate:           0.29 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 7.89 MB, Received: 4.90 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            264.72 MB
+GPU VRAM After:             265.34 MB
+GPU VRAM Delta:             643.50 KB
+KV Cache Total (est):       2.59 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  259.91 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 265.34 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  256.57 MB
+    - Active KV:     2.57 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:26:47
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   Full Precision (torch.bfloat16)
+Precision Base:      torch.bfloat16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 256.57 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       83 tokens
+Generated Tokens:    25 tokens
+Total Sequence:      108 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 3.649s (Prefill: 22.7 tok/s)
+Decode Time:                11.828s (Decode: 2.0 tok/s)
+Total End-to-End Latency:   15.477s
+Per-token Latency (Avg):    492.8ms
+Per-token Latency (Min):    352.7ms
+Per-token Latency (Max):    1.002s
+Per-token Latency (P50):    370.2ms
+Per-token Latency (P90):    963.6ms
+Per-token Latency (P99):    1.002s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            5.32 MB
+Total Data Received:        3.85 MB
+Total Network I/O:          9.17 MB
+Avg Network Rate:           0.59 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 5.32 MB, Received: 3.85 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            264.72 MB
+GPU VRAM After:             265.34 MB
+GPU VRAM Delta:             643.50 KB
+KV Cache Total (est):       2.37 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  259.91 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 265.34 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  256.57 MB
+    - Active KV:     2.35 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:27:55
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   Full Precision (torch.bfloat16)
+Precision Base:      torch.bfloat16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 256.57 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       84 tokens
+Generated Tokens:    120 tokens
+Total Sequence:      204 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 7.051s (Prefill: 11.9 tok/s)
+Decode Time:                59.189s (Decode: 2.0 tok/s)
+Total End-to-End Latency:   66.240s
+Per-token Latency (Avg):    497.4ms
+Per-token Latency (Min):    335.6ms
+Per-token Latency (Max):    1.171s
+Per-token Latency (P50):    374.9ms
+Per-token Latency (P90):    972.1ms
+Per-token Latency (P99):    1.039s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            12.95 MB
+Total Data Received:        8.26 MB
+Total Network I/O:          21.21 MB
+Avg Network Rate:           0.32 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 12.95 MB, Received: 8.26 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            264.72 MB
+GPU VRAM After:             265.34 MB
+GPU VRAM Delta:             643.50 KB
+KV Cache Total (est):       4.48 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  259.91 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 265.34 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  256.57 MB
+    - Active KV:     4.46 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:28:43
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   4-bit NF4 Quantization (BitsAndBytes)
+Precision Base:      torch.bfloat16
+Total Parameters:    81,430,848 (81430.85 K)
+Total Memory in RAM: 104.69 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       9 tokens
+Generated Tokens:    20 tokens
+Total Sequence:      29 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 1.736s (Prefill: 5.2 tok/s)
+Decode Time:                12.445s (Decode: 1.5 tok/s)
+Total End-to-End Latency:   14.181s
+Per-token Latency (Avg):    655.0ms
+Per-token Latency (Min):    444.4ms
+Per-token Latency (Max):    1.422s
+Per-token Latency (P50):    496.9ms
+Per-token Latency (P90):    1.254s
+Per-token Latency (P99):    1.422s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            1.92 MB
+Total Data Received:        1.18 MB
+Total Network I/O:          3.11 MB
+Avg Network Rate:           0.22 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 1.92 MB, Received: 1.18 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            119.30 MB
+GPU VRAM After:             119.80 MB
+GPU VRAM Delta:             508.50 KB
+KV Cache Total (est):       652.50 KB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  146.00 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 119.80 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  218.60 MB
+    - Active KV:     630.00 KB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:29:37
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   4-bit NF4 Quantization (BitsAndBytes)
+Precision Base:      torch.bfloat16
+Total Parameters:    81,430,848 (81430.85 K)
+Total Memory in RAM: 104.69 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       8 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      88 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 734.5ms (Prefill: 10.9 tok/s)
+Decode Time:                51.732s (Decode: 1.5 tok/s)
+Total End-to-End Latency:   52.467s
+Per-token Latency (Avg):    654.8ms
+Per-token Latency (Min):    425.6ms
+Per-token Latency (Max):    1.437s
+Per-token Latency (P50):    522.2ms
+Per-token Latency (P90):    1.274s
+Per-token Latency (P99):    1.437s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            6.68 MB
+Total Data Received:        3.91 MB
+Total Network I/O:          10.59 MB
+Avg Network Rate:           0.20 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 6.68 MB, Received: 3.91 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            119.30 MB
+GPU VRAM After:             119.80 MB
+GPU VRAM Delta:             508.50 KB
+KV Cache Total (est):       1.93 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  146.00 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 119.80 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  218.60 MB
+    - Active KV:     1.91 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:30:36
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   4-bit NF4 Quantization (BitsAndBytes)
+Precision Base:      torch.bfloat16
+Total Parameters:    81,430,848 (81430.85 K)
+Total Memory in RAM: 104.69 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       38 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      118 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 5.369s (Prefill: 7.1 tok/s)
+Decode Time:                52.414s (Decode: 1.5 tok/s)
+Total End-to-End Latency:   57.783s
+Per-token Latency (Avg):    663.5ms
+Per-token Latency (Min):    398.1ms
+Per-token Latency (Max):    1.503s
+Per-token Latency (P50):    542.6ms
+Per-token Latency (P90):    1.279s
+Per-token Latency (P99):    1.503s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            7.89 MB
+Total Data Received:        4.90 MB
+Total Network I/O:          12.79 MB
+Avg Network Rate:           0.22 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 7.89 MB, Received: 4.90 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            119.30 MB
+GPU VRAM After:             119.80 MB
+GPU VRAM Delta:             508.50 KB
+KV Cache Total (est):       2.59 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  146.00 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 119.80 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  218.60 MB
+    - Active KV:     2.57 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:30:59
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   4-bit NF4 Quantization (BitsAndBytes)
+Precision Base:      torch.bfloat16
+Total Parameters:    81,430,848 (81430.85 K)
+Total Memory in RAM: 104.69 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       83 tokens
+Generated Tokens:    25 tokens
+Total Sequence:      108 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 7.307s (Prefill: 11.4 tok/s)
+Decode Time:                14.868s (Decode: 1.6 tok/s)
+Total End-to-End Latency:   22.175s
+Per-token Latency (Avg):    619.5ms
+Per-token Latency (Min):    435.4ms
+Per-token Latency (Max):    1.432s
+Per-token Latency (P50):    501.9ms
+Per-token Latency (P90):    1.241s
+Per-token Latency (P99):    1.432s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            5.32 MB
+Total Data Received:        3.85 MB
+Total Network I/O:          9.17 MB
+Avg Network Rate:           0.41 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 5.32 MB, Received: 3.85 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            119.30 MB
+GPU VRAM After:             119.80 MB
+GPU VRAM Delta:             508.50 KB
+KV Cache Total (est):       2.37 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  146.00 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 119.80 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  218.60 MB
+    - Active KV:     2.35 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:32:22
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   4-bit NF4 Quantization (BitsAndBytes)
+Precision Base:      torch.bfloat16
+Total Parameters:    81,430,848 (81430.85 K)
+Total Memory in RAM: 104.69 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       84 tokens
+Generated Tokens:    120 tokens
+Total Sequence:      204 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 7.329s (Prefill: 11.5 tok/s)
+Decode Time:                74.973s (Decode: 1.6 tok/s)
+Total End-to-End Latency:   82.302s
+Per-token Latency (Avg):    630.0ms
+Per-token Latency (Min):    377.7ms
+Per-token Latency (Max):    1.449s
+Per-token Latency (P50):    464.9ms
+Per-token Latency (P90):    1.270s
+Per-token Latency (P99):    1.422s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            12.95 MB
+Total Data Received:        8.26 MB
+Total Network I/O:          21.21 MB
+Avg Network Rate:           0.26 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 12.95 MB, Received: 8.26 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            119.30 MB
+GPU VRAM After:             119.80 MB
+GPU VRAM Delta:             508.50 KB
+KV Cache Total (est):       4.48 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  146.00 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 119.80 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  218.60 MB
+    - Active KV:     4.46 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:33:11
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   8-bit Quantization (BitsAndBytes)
+Precision Base:      torch.float16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 155.32 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       9 tokens
+Generated Tokens:    20 tokens
+Total Sequence:      29 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 1.457s (Prefill: 6.2 tok/s)
+Decode Time:                15.110s (Decode: 1.3 tok/s)
+Total End-to-End Latency:   16.568s
+Per-token Latency (Avg):    795.3ms
+Per-token Latency (Min):    603.0ms
+Per-token Latency (Max):    1.675s
+Per-token Latency (P50):    646.5ms
+Per-token Latency (P90):    1.528s
+Per-token Latency (P99):    1.675s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            1.92 MB
+Total Data Received:        1.18 MB
+Total Network I/O:          3.11 MB
+Avg Network Rate:           0.19 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 1.92 MB, Received: 1.18 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            164.10 MB
+GPU VRAM After:             165.73 MB
+GPU VRAM Delta:             1.64 MB
+KV Cache Total (est):       652.50 KB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  183.97 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 165.73 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  231.25 MB
+    - Active KV:     630.00 KB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:34:21
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   8-bit Quantization (BitsAndBytes)
+Precision Base:      torch.float16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 155.32 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       8 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      88 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 850.6ms (Prefill: 9.4 tok/s)
+Decode Time:                67.941s (Decode: 1.2 tok/s)
+Total End-to-End Latency:   68.792s
+Per-token Latency (Avg):    860.0ms
+Per-token Latency (Min):    533.7ms
+Per-token Latency (Max):    1.677s
+Per-token Latency (P50):    638.0ms
+Per-token Latency (P90):    1.504s
+Per-token Latency (P99):    1.677s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            6.68 MB
+Total Data Received:        3.91 MB
+Total Network I/O:          10.59 MB
+Avg Network Rate:           0.15 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 6.68 MB, Received: 3.91 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            165.10 MB
+GPU VRAM After:             165.73 MB
+GPU VRAM Delta:             649.00 KB
+KV Cache Total (est):       1.93 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  183.97 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 165.73 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  231.25 MB
+    - Active KV:     1.91 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:35:29
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   8-bit Quantization (BitsAndBytes)
+Precision Base:      torch.float16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 155.32 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       38 tokens
+Generated Tokens:    80 tokens
+Total Sequence:      118 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 2.358s (Prefill: 16.1 tok/s)
+Decode Time:                65.130s (Decode: 1.2 tok/s)
+Total End-to-End Latency:   67.487s
+Per-token Latency (Avg):    824.4ms
+Per-token Latency (Min):    489.6ms
+Per-token Latency (Max):    1.690s
+Per-token Latency (P50):    629.2ms
+Per-token Latency (P90):    1.508s
+Per-token Latency (P99):    1.690s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            7.89 MB
+Total Data Received:        4.90 MB
+Total Network I/O:          12.79 MB
+Avg Network Rate:           0.19 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 7.89 MB, Received: 4.90 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            165.10 MB
+GPU VRAM After:             165.73 MB
+GPU VRAM Delta:             645.50 KB
+KV Cache Total (est):       2.59 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  183.97 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 165.73 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  231.25 MB
+    - Active KV:     2.57 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:35:55
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   8-bit Quantization (BitsAndBytes)
+Precision Base:      torch.float16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 155.32 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       83 tokens
+Generated Tokens:    25 tokens
+Total Sequence:      108 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 4.334s (Prefill: 19.2 tok/s)
+Decode Time:                20.523s (Decode: 1.2 tok/s)
+Total End-to-End Latency:   24.857s
+Per-token Latency (Avg):    855.1ms
+Per-token Latency (Min):    545.8ms
+Per-token Latency (Max):    1.517s
+Per-token Latency (P50):    627.4ms
+Per-token Latency (P90):    1.490s
+Per-token Latency (P99):    1.517s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            5.32 MB
+Total Data Received:        3.85 MB
+Total Network I/O:          9.17 MB
+Avg Network Rate:           0.37 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 5.32 MB, Received: 3.85 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            165.10 MB
+GPU VRAM After:             165.73 MB
+GPU VRAM Delta:             649.00 KB
+KV Cache Total (est):       2.37 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  183.97 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 165.73 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  231.25 MB
+    - Active KV:     2.35 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+
+================================================================================
+INFERENCE AUDIT REPORT — 2026-08-29 19:37:37
+================================================================================
+
+[1] MODEL INFORMATION
+--------------------------------------------------------------------------------
+Model ID / Name:     HuggingFaceTB/SmolLM2-135M
+Architecture:        Dense Transformer
+Quantization Mode:   8-bit Quantization (BitsAndBytes)
+Precision Base:      torch.float16
+Total Parameters:    134,515,008 (134515.01 K)
+Total Memory in RAM: 155.32 MB
+Dimensions:          Layers: 30, Hidden Size: 576, KV Heads: 3, Head Dim: 64
+
+[2] TOPOLOGY & COMPONENT DISTRIBUTION
+--------------------------------------------------------------------------------
+  • Worker-Node (192.168.8.130:9900):
+    Allocated: attn 0-29
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    Allocated: layers 0-29(ffn only), embedding, lm_head + norm
+
+[3] GENERATION METADATA
+--------------------------------------------------------------------------------
+Temperature:         0.0
+Prompt Tokens:       84 tokens
+Generated Tokens:    120 tokens
+Total Sequence:      204 tokens
+
+[4] LATENCY & THROUGHPUT METRICS
+--------------------------------------------------------------------------------
+Time to First Token (TTFT): 3.674s (Prefill: 22.9 tok/s)
+Decode Time:                96.980s (Decode: 1.2 tok/s)
+Total End-to-End Latency:   100.654s
+Per-token Latency (Avg):    815.0ms
+Per-token Latency (Min):    509.2ms
+Per-token Latency (Max):    1.911s
+Per-token Latency (P50):    626.3ms
+Per-token Latency (P90):    1.511s
+Per-token Latency (P99):    1.697s
+
+[5] NETWORK PAYLOAD & DATA TRANSFER
+--------------------------------------------------------------------------------
+Total Data Sent:            12.95 MB
+Total Data Received:        8.26 MB
+Total Network I/O:          21.21 MB
+Avg Network Rate:           0.21 MB/s
+
+Node Breakdown:
+  • Worker-Node (192.168.8.130:9900): Sent: 12.95 MB, Received: 8.26 MB
+
+[6] HARDWARE & MEMORY FOOTPRINT (PER NODE)
+--------------------------------------------------------------------------------
+Local Device:               cuda
+GPU VRAM Before:            165.10 MB
+GPU VRAM After:             165.74 MB
+GPU VRAM Delta:             650.00 KB
+KV Cache Total (est):       4.48 MB
+
+Node Memory Breakdown (Layer Weights + Active KV Cache):
+  • Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU:
+    - Assigned:      layers 0-29(ffn only), embedding, lm_head + norm
+    - Layer Memory:  183.97 MB
+    - Active KV:     0.00 B
+    - Total Footprint: 165.74 MB (VRAM)
+  • Worker-Node (192.168.8.130:9900):
+    - Assigned:      attn 0-29
+    - Layer Memory:  231.25 MB
+    - Active KV:     4.46 MB
+    - Total Footprint: 3.35 GB (Process RAM)
+================================================================================
+

@@ -1,7 +1,7 @@
 # Distributed Volunteer Inference Experimental Evaluation Report
 
-**Total Runs Executed:** 200 | **Successful:** 200 | **Failed/OOM:** 0
-**Last Updated:** 2026-08-29 16:28:02
+**Total Runs Executed:** 215 | **Successful:** 215 | **Failed/OOM:** 0
+**Last Updated:** 2026-08-29 19:37:37
 
 ## 1. Executive Summary & Key Findings
 - **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).
@@ -212,3 +212,18 @@
 | Qwen2.5-3B | 8bit | `pipelined_multi_stage` | med_med | 119 | 10.1431 | 0.37 | 17.92 MB | 0.079 | 3140.04 MB | 1888.0 KB | 5321.17 MB |
 | Qwen2.5-3B | 8bit | `pipelined_multi_stage` | long_short | 110 | 15.5007 | 0.38 | 15.19 MB | 0.193 | 3140.04 MB | 1744.0 KB | 5321.17 MB |
 | Qwen2.5-3B | 8bit | `pipelined_multi_stage` | long_long | 205 | 13.6045 | 0.37 | 30.46 MB | 0.09 | 3140.04 MB | 3264.0 KB | 5321.17 MB |
+| SmolLM2-135M | none | `offload_all_attn` | short_short | 29 | 1.1841 | 1.83 | 3.11 MB | 0.269 | 256.57 MB | 630.0 KB | 3431.06 MB |
+| SmolLM2-135M | none | `offload_all_attn` | short_med | 88 | 0.7356 | 1.75 | 10.59 MB | 0.231 | 256.57 MB | 1957.5 KB | 3431.06 MB |
+| SmolLM2-135M | none | `offload_all_attn` | med_med | 118 | 2.1922 | 1.89 | 12.79 MB | 0.291 | 256.57 MB | 2632.5 KB | 3431.07 MB |
+| SmolLM2-135M | none | `offload_all_attn` | long_short | 108 | 3.6491 | 2.03 | 9.17 MB | 0.593 | 256.57 MB | 2407.5 KB | 3431.07 MB |
+| SmolLM2-135M | none | `offload_all_attn` | long_long | 204 | 7.0514 | 2.01 | 21.21 MB | 0.32 | 256.57 MB | 4567.5 KB | 3431.07 MB |
+| SmolLM2-135M | 4bit | `offload_all_attn` | short_short | 29 | 1.736 | 1.53 | 3.11 MB | 0.219 | 218.6 MB | 630.0 KB | 3431.07 MB |
+| SmolLM2-135M | 4bit | `offload_all_attn` | short_med | 88 | 0.7345 | 1.53 | 10.59 MB | 0.202 | 218.6 MB | 1957.5 KB | 3431.07 MB |
+| SmolLM2-135M | 4bit | `offload_all_attn` | med_med | 118 | 5.3693 | 1.51 | 12.79 MB | 0.221 | 218.6 MB | 2632.5 KB | 3431.07 MB |
+| SmolLM2-135M | 4bit | `offload_all_attn` | long_short | 108 | 7.3074 | 1.61 | 9.17 MB | 0.414 | 218.6 MB | 2407.5 KB | 3431.07 MB |
+| SmolLM2-135M | 4bit | `offload_all_attn` | long_long | 204 | 7.3288 | 1.59 | 21.21 MB | 0.258 | 218.6 MB | 4567.5 KB | 3431.08 MB |
+| SmolLM2-135M | 8bit | `offload_all_attn` | short_short | 29 | 1.4572 | 1.26 | 3.11 MB | 0.188 | 231.25 MB | 630.0 KB | 3431.25 MB |
+| SmolLM2-135M | 8bit | `offload_all_attn` | short_med | 88 | 0.8506 | 1.16 | 10.59 MB | 0.154 | 231.25 MB | 1957.5 KB | 3431.25 MB |
+| SmolLM2-135M | 8bit | `offload_all_attn` | med_med | 118 | 2.3576 | 1.21 | 12.79 MB | 0.19 | 231.25 MB | 2632.5 KB | 3431.27 MB |
+| SmolLM2-135M | 8bit | `offload_all_attn` | long_short | 108 | 4.3339 | 1.17 | 9.17 MB | 0.369 | 231.25 MB | 2407.5 KB | 3431.34 MB |
+| SmolLM2-135M | 8bit | `offload_all_attn` | long_long | 204 | 3.6743 | 1.23 | 21.21 MB | 0.211 | 231.25 MB | 4567.5 KB | 3431.34 MB |
