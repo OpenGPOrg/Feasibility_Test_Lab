@@ -134,6 +134,16 @@ def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
             prompt_text = prompt_cfg.get("prompt", "Hello world")
             max_tokens = prompt_cfg.get("max_new_tokens", 20)
 
+            # Pre-flight OOM Admission Control
+            can_admit, req_bytes, free_bytes, reason = dm.check_worker_memory_admission(
+                worker_node, split_components, max_sequence_len=max_tokens + 150
+            )
+            if not can_admit:
+                print(f"⏩ OOM PREVENTED: Skipping {exp_id} -> {reason}")
+                all_rows[idx]["status"] = "skipped"
+                all_rows[idx]["error"] = f"Pre-flight OOM Prevention: {reason}"
+                continue
+
             print(f"\n--- Rerunning {exp_id} [{split_name} | {prompt_key}] ---")
 
             dm.assignments.clear()

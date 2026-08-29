@@ -644,6 +644,66 @@ class DistributedModel:
             "layer_idx": layer_idx, "expert_idx": expert_idx,
         }
 
+    def check_worker_memory_admission(self, node, assigned_components=None, max_sequence_len=512, safety_ratio=0.85):
+        """
+        Pre-flight Predictive OOM Admission Control:
+        Calculates expected layer weights + peak KV cache + activation buffer footprint
+        against the worker's available RAM before dispatching computation.
+
+        Returns (can_admit: bool, required_bytes: int, available_bytes: int, reason: str)
+        """
+        if assigned_components is None:
+            assigned_components = [
+                (v["type"], v.get("layer_idx", 0))
+                for v in self.assignments.values() if v.get("node") == node
+            ]
+
+        # 1. Query free RAM from worker or default to 7.7 GB
+        free_ram = 7.7 * (1024**3)
+        try:
+            info = node.send_cmd({"cmd": "info"})
+            if "ram_free" in info and info["ram_free"] > 0:
+                free_ram = info["ram_free"]
+        except Exception:
+            pass
+
+        # 2. Calculate layer weight memory
+        weight_bytes = 0
+        kv_layers = 0
+        for comp_type, l_idx in assigned_components:
+            if l_idx is not None and l_idx < len(self.layers):
+                lyr = self.layers[l_idx]
+                if comp_type == "layer":
+                    weight_bytes += sum(p.numel() * self.dtype_size for p in lyr.parameters())
+                    kv_layers += 1
+                elif comp_type == "attention" and hasattr(lyr, "self_attn"):
+                    weight_bytes += sum(p.numel() * self.dtype_size for p in lyr.self_attn.parameters())
+                    kv_layers += 1
+                elif comp_type == "ffn" and hasattr(lyr, "mlp"):
+                    weight_bytes += sum(p.numel() * self.dtype_size for p in lyr.mlp.parameters())
+
+        # 3. Calculate peak theoretical KV cache
+        num_kv_heads = getattr(getattr(self, "model", None).config, "num_key_value_heads", getattr(getattr(self, "model", None).config, "num_attention_heads", 16)) if hasattr(self, "model") and self.model else 16
+        head_dim = getattr(getattr(self, "model", None).config, "head_dim", 64) if hasattr(self, "model") and self.model else 64
+        kv_cache_bytes = 2 * kv_layers * num_kv_heads * head_dim * self.dtype_size * max_sequence_len
+
+        # 4. Activation buffer overhead
+        hidden_size = getattr(getattr(self, "model", None).config, "hidden_size", 2048) if hasattr(self, "model") and self.model else 2048
+        act_overhead = 2 * max_sequence_len * hidden_size * self.dtype_size + (400 * 1024 * 1024)
+
+        total_required = weight_bytes + kv_cache_bytes + act_overhead
+        allowed_max = free_ram * safety_ratio
+
+        if total_required > allowed_max:
+            reason = (
+                f"Predicted memory ({total_required / (1024**3):.2f} GB = "
+                f"{weight_bytes/(1024**3):.2f}GB weights + {kv_cache_bytes/(1024**2):.1f}MB KV + {act_overhead/(1024**2):.1f}MB buffer) "
+                f"exceeds safe limit ({allowed_max / (1024**3):.2f} GB of {free_ram / (1024**3):.2f} GB free)"
+            )
+            return False, total_required, free_ram, reason
+
+        return True, total_required, free_ram, "Admitted safely"
+
     def unassign(self, comp_id):
         self.assignments.pop(comp_id, None)
 

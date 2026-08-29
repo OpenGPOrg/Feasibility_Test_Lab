@@ -55,7 +55,10 @@ MODELS_CONFIG = {
             "local_baseline": [],
             "offload_25pct": [("layer", i) for i in range(0, 9)],
             "offload_50pct": [("layer", i) for i in range(0, 18)],
-            "pipelined_multi_stage": [("layer", i) for i in range(6, 12)] + [("layer", i) for i in range(20, 26)],
+            "offload_75pct": [("layer", i) for i in range(0, 27)],
+            "hybrid_attn_10": [("attention", i) for i in range(10, 20)],
+            "hybrid_ffn_10": [("ffn", i) for i in range(10, 20)],
+            "pipelined_multi_stage": [("layer", i) for i in range(6, 14)] + [("layer", i) for i in range(20, 28)],
         }
     }
 }
@@ -238,6 +241,39 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
                 comp_str = compress_comp_list(allocated_comps)
 
                 print(f"\n--- Topology [{split_name}]: {comp_str} ---")
+
+                # Pre-flight Predictive Memory Admission Control
+                can_admit, req_bytes, free_bytes, reason = dm.check_worker_memory_admission(
+                    worker_node, split_components, max_sequence_len=300
+                )
+                if not can_admit:
+                    print(f"⏩ OOM PREVENTED: Skipping topology {split_name} on {worker_label} -> {reason}")
+                    for prompt_key, prompt_cfg in PROMPT_SUITES.items():
+                        exp_counter += 1
+                        exp_id = f"EXP_{exp_counter:03d}_{model_name}_{quant}_{split_name}_{prompt_key}"
+                        row = {
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "exp_id": exp_id,
+                            "model": model_name,
+                            "quant": quant,
+                            "split_name": split_name,
+                            "prompt_type": prompt_key,
+                            "total_sequence": 0, "ttft_sec": 0, "prefill_tps": 0,
+                            "decode_time_sec": 0, "decode_tps": 0, "total_time_sec": 0,
+                            "p50_latency_ms": 0, "p90_latency_ms": 0, "p99_latency_ms": 0,
+                            "net_sent_bytes": 0, "net_recv_bytes": 0, "net_total_bytes": 0,
+                            "net_rate_mb_s": 0, "net_per_token_kb": 0,
+                            "master_layer_mb": 0, "master_kv_kb": 0,
+                            "master_vram_after_mb": 0, "master_vram_delta_mb": 0,
+                            "worker_layer_mb": 0, "worker_kv_kb": 0,
+                            "worker_ram_mb": round(free_bytes/(1024**2), 2),
+                            "worker_vram_mb": 0,
+                            "status": "skipped",
+                            "error": f"Pre-flight OOM Prevention: {reason}"
+                        }
+                        append_csv(row)
+                    generate_markdown_summary()
+                    continue
 
                 try:
                     dm.apply_distribution()
