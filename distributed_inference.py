@@ -1015,15 +1015,53 @@ class DistributedModel:
         # 2. Remote Worker Nodes
         for node in unique_nodes.values():
             try:
-                resp = node.send_cmd({"cmd": "get_memory"})
-                if resp and resp.get("status") == "ok":
-                    node_mem_stats[node.label] = {
-                        "is_local": False,
-                        "layer_bytes": resp.get("layer_bytes", 0),
-                        "kv_bytes": resp.get("kv_bytes", 0),
-                        "ram_rss": resp.get("ram_rss", 0),
-                        "vram_alloc": resp.get("vram_alloc", 0),
-                    }
+                # Calculate assigned layer bytes and KV layer count for this node from assignments
+                w_layer_bytes = 0
+                w_assigned_kv_layers = 0
+                for cid, ainfo in self.assignments.items():
+                    if ainfo["node"] == node:
+                        ctype = ainfo["type"]
+                        lidx = ainfo.get("layer_idx")
+                        if ctype == "layer" and lidx is not None and lidx < len(self.layers) and self.layers[lidx] is not None:
+                            w_layer_bytes += sum(p.numel() * p.element_size() for p in self.layers[lidx].parameters())
+                            w_assigned_kv_layers += 1
+                        elif ctype == "attention" and lidx is not None and lidx < len(self.layers) and self.layers[lidx] is not None:
+                            if hasattr(self.layers[lidx], "self_attn"):
+                                w_layer_bytes += sum(p.numel() * p.element_size() for p in self.layers[lidx].self_attn.parameters())
+                            w_assigned_kv_layers += 1
+                        elif ctype == "ffn" and lidx is not None and lidx < len(self.layers) and self.layers[lidx] is not None:
+                            if hasattr(self.layers[lidx], "mlp"):
+                                w_layer_bytes += sum(p.numel() * p.element_size() for p in self.layers[lidx].mlp.parameters())
+
+                w_kv_bytes = 2 * w_assigned_kv_layers * self.num_kv_heads * self.head_dim * self.dtype_size * total_seq
+                w_ram = 0
+                w_vram = 0
+
+                # Query live worker for memory info if available
+                try:
+                    resp = node.send_cmd({"cmd": "get_memory"})
+                    if resp and resp.get("status") == "ok":
+                        w_layer_bytes = resp.get("layer_bytes", w_layer_bytes)
+                        w_kv_bytes = resp.get("kv_bytes", w_kv_bytes)
+                        w_ram = resp.get("ram_rss", 0)
+                        w_vram = resp.get("vram_alloc", 0)
+                except Exception:
+                    try:
+                        resp_st = node.send_cmd({"cmd": "status"})
+                        if resp_st and resp_st.get("status") == "ok":
+                            comps_dict = resp_st.get("components", {})
+                            if comps_dict:
+                                w_layer_bytes = sum(c.get("size_bytes", 0) for c in comps_dict.values())
+                    except Exception:
+                        pass
+
+                node_mem_stats[node.label] = {
+                    "is_local": False,
+                    "layer_bytes": w_layer_bytes,
+                    "kv_bytes": w_kv_bytes,
+                    "ram_rss": w_ram,
+                    "vram_alloc": w_vram,
+                }
             except Exception:
                 pass
 
@@ -1043,6 +1081,8 @@ class DistributedModel:
 
         # Append detailed audit log report (without prompt/response text)
         self._audit_log_report(stats_dict, temperature)
+        self.last_stats = stats_dict
+        return stats_dict
 
     def _forward_pass(self, input_ids_or_embeds, is_prefill):
         """One forward pass through all components."""
@@ -1173,6 +1213,32 @@ class DistributedModel:
         import torch
         return outputs if isinstance(outputs, torch.Tensor) else outputs[0]
 
+    def _send_cmd_with_dtype_recovery(self, node, msg):
+        """Send command to worker, auto-recovering from any remote PyTorch CPU dtype mismatch."""
+        try:
+            return node.send_cmd(msg)
+        except RuntimeError as e:
+            err_str = str(e).lower()
+            if any(k in err_str for k in ("dtype", "mat1", "m1 and m2", "same type", "half", "bfloat16", "float")):
+                orig_hidden = msg.get("hidden_states")
+                if orig_hidden is not None and isinstance(orig_hidden, torch.Tensor):
+                    candidates = [torch.bfloat16, torch.float16, torch.float32]
+                    for target_dt in candidates:
+                        if orig_hidden.dtype == target_dt:
+                            continue
+                        try:
+                            msg_retry = dict(msg)
+                            msg_retry["hidden_states"] = orig_hidden.to(dtype=target_dt)
+                            if "position_embeddings" in msg_retry and msg_retry["position_embeddings"] is not None:
+                                msg_retry["position_embeddings"] = tuple(
+                                    p.to(dtype=target_dt) if isinstance(p, torch.Tensor) else p
+                                    for p in msg_retry["position_embeddings"]
+                                )
+                            return node.send_cmd(msg_retry)
+                        except Exception:
+                            continue
+            raise e
+
     def _remote_layer(self, idx, hidden, position_ids, pos_emb):
         """Send hidden_states to remote worker for full layer forward."""
         node = self.assignments[f"layer_{idx}"]["node"]
@@ -1184,7 +1250,7 @@ class DistributedModel:
         }
         if pos_emb is not None:
             msg["position_embeddings"] = tuple(p.cpu() for p in pos_emb)
-        resp = node.send_cmd(msg)
+        resp = self._send_cmd_with_dtype_recovery(node, msg)
         return resp["hidden_states"].to(self.local_device)
 
     def _hybrid_attn_remote(self, idx, layer, hidden, position_ids, pos_emb):
@@ -1203,7 +1269,7 @@ class DistributedModel:
         }
         if pos_emb is not None:
             msg["position_embeddings"] = tuple(p.cpu() for p in pos_emb)
-        resp = node.send_cmd(msg)
+        resp = self._send_cmd_with_dtype_recovery(node, msg)
         attn_out = resp["hidden_states"].to(self.local_device)
 
         hidden = residual + attn_out
@@ -1268,7 +1334,7 @@ class DistributedModel:
         hidden = layer.post_attention_layernorm(hidden)
 
         node = self.assignments[f"ffn_{idx}"]["node"]
-        resp = node.send_cmd({
+        resp = self._send_cmd_with_dtype_recovery(node, {
             "cmd": "forward_ffn",
             "component_id": f"ffn_{idx}",
             "hidden_states": hidden.cpu(),

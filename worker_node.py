@@ -503,7 +503,8 @@ def _match_tuple_dtype(tup, module):
                     kwargs.pop("attention_mask", None)
                     return module(hs, **kwargs)
         except RuntimeError as e:
-            if "must have the same dtype" in str(e) or "expected dtype" in str(e):
+            err_msg = str(e).lower()
+            if any(k in err_msg for k in ("dtype", "mat1", "m1 and m2", "same type", "half", "bfloat16", "float")):
                 for dt in (torch.bfloat16, torch.float16, torch.float32):
                     if hs.dtype == dt:
                         continue
