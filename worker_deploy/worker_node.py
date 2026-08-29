@@ -80,6 +80,71 @@ def recv_msg(sock):
     return obj, 8 + length
 
 
+def get_kv_cache_size_bytes(cache):
+    """Calculate exact memory occupied by a DynamicCache or tuple KV cache."""
+    if cache is None:
+        return 0
+    total_bytes = 0
+    try:
+        if hasattr(cache, "layers"):
+            for layer in cache.layers:
+                if hasattr(layer, "keys") and isinstance(layer.keys, torch.Tensor):
+                    total_bytes += layer.keys.numel() * layer.keys.element_size()
+                if hasattr(layer, "values") and isinstance(layer.values, torch.Tensor):
+                    total_bytes += layer.values.numel() * layer.values.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
+            for k in cache.key_cache:
+                if isinstance(k, torch.Tensor):
+                    total_bytes += k.numel() * k.element_size()
+            for v in cache.value_cache:
+                if isinstance(v, torch.Tensor):
+                    total_bytes += v.numel() * v.element_size()
+            if total_bytes > 0:
+                return total_bytes
+        if isinstance(cache, (list, tuple)):
+            for item in cache:
+                if isinstance(item, torch.Tensor):
+                    total_bytes += item.numel() * item.element_size()
+                elif isinstance(item, (list, tuple)):
+                    total_bytes += get_kv_cache_size_bytes(item)
+            return total_bytes
+    except Exception:
+        pass
+    return total_bytes
+
+
+def _get_module_floating_dtype(module):
+    """Find the floating point dtype of a module's parameters or buffers."""
+    for p in module.parameters():
+        if p.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return p.dtype
+    for b in module.buffers():
+        if b.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
+            return b.dtype
+    return None
+
+
+def _match_dtype(tensor, module):
+    """Ensure tensor dtype matches the module's active floating point dtype."""
+    if tensor is None or not isinstance(tensor, torch.Tensor):
+        return tensor
+    dt = _get_module_floating_dtype(module)
+    if dt is not None and tensor.dtype != dt:
+        return tensor.to(dt)
+    return tensor
+
+
+def _match_tuple_dtype(tup, module):
+    if tup is None:
+        return tup
+    dt = _get_module_floating_dtype(module)
+    if dt is not None:
+        return tuple(t.to(dt) if isinstance(t, torch.Tensor) and t.dtype != dt else t for t in tup)
+    return tup
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Worker
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -406,68 +471,6 @@ class Worker:
 
         # Fall through to normal load
         return self._cmd_load(msg)
-
-def get_kv_cache_size_bytes(cache):
-    """Calculate exact memory occupied by a DynamicCache or tuple KV cache."""
-    if cache is None:
-        return 0
-    total_bytes = 0
-    try:
-        if hasattr(cache, "layers"):
-            for layer in cache.layers:
-                if hasattr(layer, "keys") and isinstance(layer.keys, torch.Tensor):
-                    total_bytes += layer.keys.numel() * layer.keys.element_size()
-                if hasattr(layer, "values") and isinstance(layer.values, torch.Tensor):
-                    total_bytes += layer.values.numel() * layer.values.element_size()
-            if total_bytes > 0:
-                return total_bytes
-        if hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
-            for k in cache.key_cache:
-                if isinstance(k, torch.Tensor):
-                    total_bytes += k.numel() * k.element_size()
-            for v in cache.value_cache:
-                if isinstance(v, torch.Tensor):
-                    total_bytes += v.numel() * v.element_size()
-            if total_bytes > 0:
-                return total_bytes
-        if isinstance(cache, (list, tuple)):
-            for item in cache:
-                if isinstance(item, torch.Tensor):
-                    total_bytes += item.numel() * item.element_size()
-                elif isinstance(item, (list, tuple)):
-                    total_bytes += get_kv_cache_size_bytes(item)
-            return total_bytes
-    except Exception:
-        pass
-    return total_bytes
-
-def _get_module_floating_dtype(module):
-    """Find the floating point dtype of a module's parameters or buffers."""
-    for p in module.parameters():
-        if p.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            return p.dtype
-    for b in module.buffers():
-        if b.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            return b.dtype
-    return None
-
-def _match_dtype(tensor, module):
-    """Ensure tensor dtype matches the module's active floating point dtype."""
-    if tensor is None or not isinstance(tensor, torch.Tensor):
-        return tensor
-    dt = _get_module_floating_dtype(module)
-    if dt is not None and tensor.dtype != dt:
-        return tensor.to(dt)
-    return tensor
-
-def _match_tuple_dtype(tup, module):
-    if tup is None:
-        return tup
-    dt = _get_module_floating_dtype(module)
-    if dt is not None:
-        return tuple(t.to(dt) if isinstance(t, torch.Tensor) and t.dtype != dt else t for t in tup)
-    return tup
-
 
     # ── Forward Passes ────────────────────────────────────────────────────
     def _get_cache(self, comp_id):
