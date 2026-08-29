@@ -481,27 +481,69 @@ def _match_tuple_dtype(tup, module):
 
     def _run_module_safe(self, module, hs, pos_emb, kwargs):
         """Execute a module with multi-stage signature handling and automatic dtype mismatch recovery."""
+        def _try_call(curr_hs, curr_pos_emb, curr_kwargs):
+            k = dict(curr_kwargs)
+            # Strategy 1: Standard full keyword args
+            try:
+                return module(curr_hs, **k)
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 2: Qwen2 / Llama 3.2 with explicit position_embeddings & attention_mask
+            try:
+                return module(
+                    curr_hs,
+                    position_embeddings=curr_pos_emb,
+                    attention_mask=None,
+                    past_key_value=k.get("past_key_values") or k.get("past_key_value"),
+                    position_ids=k.get("position_ids")
+                )
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 3: Positional parameters (hidden_states, pos_emb, mask, past_kv, cache_pos, pos_ids)
+            try:
+                return module(
+                    curr_hs,
+                    curr_pos_emb,
+                    None,
+                    k.get("past_key_values") or k.get("past_key_value"),
+                    None,
+                    k.get("position_ids")
+                )
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 4: Legacy past_key_value
+            try:
+                k_legacy = dict(k)
+                if "past_key_values" in k_legacy:
+                    k_legacy["past_key_value"] = k_legacy.pop("past_key_values")
+                k_legacy.pop("position_embeddings", None)
+                return module(curr_hs, **k_legacy)
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 5: Without position embeddings
+            try:
+                k_nopos = dict(k)
+                k_nopos.pop("position_embeddings", None)
+                k_nopos.pop("attention_mask", None)
+                return module(curr_hs, **k_nopos)
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 6: Position IDs only
+            try:
+                return module(curr_hs, position_ids=k.get("position_ids"))
+            except (TypeError, ValueError):
+                pass
+
+            # Strategy 7: Pure tensor call
+            return module(curr_hs)
+
         try:
-            return module(hs, **kwargs)
-        except TypeError as e:
-            if "past_key_values" in str(e) or "unexpected keyword argument" in str(e):
-                kwargs["past_key_value"] = kwargs.pop("past_key_values", None)
-                try:
-                    return module(hs, **kwargs)
-                except TypeError:
-                    kwargs.pop("position_embeddings", None)
-                    try:
-                        return module(hs, **kwargs)
-                    except TypeError:
-                        kwargs.pop("attention_mask", None)
-                        return module(hs, **kwargs)
-            else:
-                kwargs.pop("position_embeddings", None)
-                try:
-                    return module(hs, **kwargs)
-                except TypeError:
-                    kwargs.pop("attention_mask", None)
-                    return module(hs, **kwargs)
+            return _try_call(hs, pos_emb, kwargs)
         except RuntimeError as e:
             err_msg = str(e).lower()
             if any(k in err_msg for k in ("dtype", "mat1", "m1 and m2", "same type", "half", "bfloat16", "float")):
@@ -510,9 +552,8 @@ def _match_tuple_dtype(tup, module):
                         continue
                     try:
                         fallback_hs = hs.to(dt)
-                        if pos_emb is not None:
-                            kwargs["position_embeddings"] = tuple(p.to(dt) if isinstance(p, torch.Tensor) else p for p in pos_emb)
-                        return module(fallback_hs, **kwargs)
+                        fallback_pos_emb = tuple(p.to(dt) if isinstance(p, torch.Tensor) else p for p in pos_emb) if pos_emb is not None else None
+                        return _try_call(fallback_hs, fallback_pos_emb, kwargs)
                     except Exception:
                         continue
             raise
