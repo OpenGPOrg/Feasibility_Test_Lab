@@ -30,15 +30,6 @@ from benchmark_experiments import (
     generate_markdown_summary,
 )
 
-# User requested skip list for excessively slow full CPU offloads on long sequences
-SKIP_EXP_IDS = {
-    "EXP_142_Qwen2.5-3B_4bit_offload_all_layers_short_med",
-    "EXP_143_Qwen2.5-3B_4bit_offload_all_layers_med_med",
-    "EXP_144_Qwen2.5-3B_4bit_offload_all_layers_long_short",
-    "EXP_145_Qwen2.5-3B_4bit_offload_all_layers_long_long",
-}
-
-
 def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
     print("=" * 80)
     print("STARTING TARGETED RE-RUN FOR FAILED EXPERIMENTS")
@@ -55,11 +46,6 @@ def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames
         for idx, r in enumerate(reader):
-            exp_id = r.get("exp_id", "")
-            split = r.get("split_name", "")
-            if split == "offload_all_layers" or exp_id in SKIP_EXP_IDS:
-                r["status"] = "skipped"
-                r["error"] = "Skipped by user directive (full 100% layer CPU offloading omitted)"
             all_rows.append(r)
             if r.get("status") not in ("success", "skipped"):
                 failed_indices.append(idx)
@@ -70,7 +56,7 @@ def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
         writer.writeheader()
         writer.writerows(all_rows)
 
-    print(f"Found {len(failed_indices)} active failed runs to execute (Skipped {len(SKIP_EXP_IDS)} long full-layer runs).")
+    print(f"Found {len(failed_indices)} active runs to execute.")
     if not failed_indices:
         print("✓ All target experiments completed!")
         generate_markdown_summary()
@@ -124,10 +110,6 @@ def rerun_failed_experiments(worker_host="192.168.8.130", worker_port=9900):
             exp_id = row["exp_id"]
             split_name = row["split_name"]
             prompt_key = row["prompt_type"]
-
-            if exp_id in SKIP_EXP_IDS:
-                print(f"⏩ Skipping {exp_id} as requested.")
-                continue
 
             split_components = splits_dict.get(split_name, [])
             prompt_cfg = PROMPT_SUITES.get(prompt_key, {})
