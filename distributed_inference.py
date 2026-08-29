@@ -1242,16 +1242,18 @@ class DistributedModel:
     def _remote_layer(self, idx, hidden, position_ids, pos_emb):
         """Send hidden_states to remote worker for full layer forward."""
         node = self.assignments[f"layer_{idx}"]["node"]
+        target_dt = torch.bfloat16 if getattr(self, "config", {}).get("torch_dtype") == "bfloat16" else hidden.dtype
+        hs_cpu = hidden.to(dtype=target_dt).cpu()
         msg = {
             "cmd": "forward_layer",
             "component_id": f"layer_{idx}",
-            "hidden_states": hidden.cpu(),
+            "hidden_states": hs_cpu,
             "position_ids": position_ids.cpu(),
         }
         if pos_emb is not None:
-            msg["position_embeddings"] = tuple(p.cpu() for p in pos_emb)
+            msg["position_embeddings"] = tuple(p.to(dtype=target_dt).cpu() if isinstance(p, torch.Tensor) else p for p in pos_emb)
         resp = self._send_cmd_with_dtype_recovery(node, msg)
-        return resp["hidden_states"].to(self.local_device)
+        return resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
 
     def _hybrid_attn_remote(self, idx, layer, hidden, position_ids, pos_emb):
         """Attention on remote, FFN locally."""
@@ -1261,16 +1263,18 @@ class DistributedModel:
 
         # 2. Remote attention
         node = self.assignments[f"attn_{idx}"]["node"]
+        target_dt = torch.bfloat16 if getattr(self, "config", {}).get("torch_dtype") == "bfloat16" else hidden.dtype
+        hs_cpu = hidden.to(dtype=target_dt).cpu()
         msg = {
             "cmd": "forward_attention",
             "component_id": f"attn_{idx}",
-            "hidden_states": hidden.cpu(),
+            "hidden_states": hs_cpu,
             "position_ids": position_ids.cpu(),
         }
         if pos_emb is not None:
-            msg["position_embeddings"] = tuple(p.cpu() for p in pos_emb)
+            msg["position_embeddings"] = tuple(p.to(dtype=target_dt).cpu() if isinstance(p, torch.Tensor) else p for p in pos_emb)
         resp = self._send_cmd_with_dtype_recovery(node, msg)
-        attn_out = resp["hidden_states"].to(self.local_device)
+        attn_out = resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
 
         hidden = residual + attn_out
 
@@ -1334,12 +1338,13 @@ class DistributedModel:
         hidden = layer.post_attention_layernorm(hidden)
 
         node = self.assignments[f"ffn_{idx}"]["node"]
+        target_dt = torch.bfloat16 if getattr(self, "config", {}).get("torch_dtype") == "bfloat16" else hidden.dtype
         resp = self._send_cmd_with_dtype_recovery(node, {
             "cmd": "forward_ffn",
             "component_id": f"ffn_{idx}",
-            "hidden_states": hidden.cpu(),
+            "hidden_states": hidden.to(dtype=target_dt).cpu(),
         })
-        ffn_out = resp["hidden_states"].to(self.local_device)
+        ffn_out = resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
         hidden = residual + ffn_out
         return hidden
 

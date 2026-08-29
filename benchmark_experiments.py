@@ -57,7 +57,6 @@ MODELS_CONFIG = {
             "offload_25pct": [("layer", i) for i in range(0, 9)],
             "offload_50pct": [("layer", i) for i in range(0, 18)],
             "offload_75pct": [("layer", i) for i in range(0, 27)],
-            "offload_all_layers": [("layer", i) for i in range(0, 36)],
             "hybrid_attn_10": [("attention", i) for i in range(10, 20)],
             "hybrid_ffn_10": [("ffn", i) for i in range(10, 20)],
             "pipelined_multi_stage": [("layer", i) for i in range(6, 14)] + [("layer", i) for i in range(20, 28)],
