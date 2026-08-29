@@ -1,7 +1,7 @@
 # Distributed Volunteer Inference Experimental Evaluation Report
 
-**Total Runs Executed:** 150 | **Successful:** 125 | **Failed/OOM:** 25
-**Last Updated:** 2026-08-29 10:14:31
+**Total Runs Executed:** 130 | **Successful:** 125 | **Failed/OOM:** 5
+**Last Updated:** 2026-08-29 10:16:49
 
 ## 1. Executive Summary & Key Findings
 - **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).
