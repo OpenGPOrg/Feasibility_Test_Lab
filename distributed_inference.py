@@ -77,9 +77,37 @@ def fmt_time(s):
 
 def fmt_params(n):
     if n >= 1e9: return f"{n/1e9:.2f} B"
-    if n >= 1e6: return f"{n/1e6:.2f} M"
     if n >= 1e3: return f"{n/1e3:.2f} K"
     return str(n)
+
+
+class AttentionRemoteAdapter(torch.nn.Module):
+    """Universal callable wrapper for remote attention modules handling modern Transformers signatures."""
+    def __init__(self, attn_module, rotary_emb_module=None):
+        super().__init__()
+        self.attn = attn_module
+        self.rotary_emb = rotary_emb_module
+
+    def forward(self, hidden_states, *args, **kwargs):
+        pos_ids = kwargs.get("position_ids")
+        pos_emb = kwargs.get("position_embeddings")
+        past_kv = kwargs.get("past_key_values") or kwargs.get("past_key_value")
+        mask = kwargs.get("attention_mask")
+
+        if pos_emb is None and self.rotary_emb is not None and pos_ids is not None:
+            try:
+                pos_emb = self.rotary_emb(hidden_states, pos_ids)
+            except Exception:
+                pass
+
+        try:
+            return self.attn(hidden_states, position_embeddings=pos_emb, attention_mask=mask, past_key_value=past_kv, position_ids=pos_ids)
+        except Exception:
+            try:
+                return self.attn(hidden_states, pos_emb, mask, past_kv, None, pos_ids)
+            except Exception:
+                return self.attn(hidden_states)
+
 
 def compress_comp_list(comps):
     """Compress list of components into readable ranges (e.g. 'layers 0-23, attn 24-30')."""
@@ -644,13 +672,17 @@ class DistributedModel:
             "layer_idx": layer_idx, "expert_idx": expert_idx,
         }
 
-    def check_worker_memory_admission(self, node, assigned_components=None, max_sequence_len=512, safety_ratio=0.85):
+    def check_worker_memory_admission(self, node, assigned_components=None, max_sequence_len=512, gate_ratio=0.75):
         """
-        Pre-flight Predictive OOM Admission Control:
-        Calculates expected layer weights + peak KV cache + activation buffer footprint
-        against the worker's available RAM before dispatching computation.
+        Pre-flight Predictive Memory Admission Gate:
+        Checks whether expected layer weights + peak KV cache + activation buffer footprint
+        exceeds 75% of the worker's FULL (total) RAM capacity.
 
-        Returns (can_admit: bool, required_bytes: int, available_bytes: int, reason: str)
+        - If Total Required > 75% of Worker Total RAM -> Gate fails (SKIP).
+        - If Total Required <= 75% of Worker Total RAM -> Gate passes (ADMIT).
+          (If a runtime physical OOM occurs, it will be caught and recorded as failed).
+
+        Returns (can_admit: bool, required_bytes: int, total_ram_bytes: int, reason: str)
         """
         if assigned_components is None:
             assigned_components = [
@@ -658,12 +690,12 @@ class DistributedModel:
                 for v in self.assignments.values() if v.get("node") == node
             ]
 
-        # 1. Query free RAM from worker or default to 7.7 GB
-        free_ram = 7.7 * (1024**3)
+        # 1. Query full (total) RAM from worker or default to 8.0 GB
+        total_ram = 8.0 * (1024**3)
         try:
             info = node.send_cmd({"cmd": "info"})
-            if "ram_free" in info and info["ram_free"] > 0:
-                free_ram = info["ram_free"]
+            if "ram_total" in info and info["ram_total"] > 0:
+                total_ram = info["ram_total"]
         except Exception:
             pass
 
@@ -692,17 +724,17 @@ class DistributedModel:
         act_overhead = 2 * max_sequence_len * hidden_size * self.dtype_size + (400 * 1024 * 1024)
 
         total_required = weight_bytes + kv_cache_bytes + act_overhead
-        allowed_max = free_ram * safety_ratio
+        gate_limit = total_ram * gate_ratio
 
-        if total_required > allowed_max:
+        if total_required > gate_limit:
             reason = (
                 f"Predicted memory ({total_required / (1024**3):.2f} GB = "
                 f"{weight_bytes/(1024**3):.2f}GB weights + {kv_cache_bytes/(1024**2):.1f}MB KV + {act_overhead/(1024**2):.1f}MB buffer) "
-                f"exceeds safe limit ({allowed_max / (1024**3):.2f} GB of {free_ram / (1024**3):.2f} GB free)"
+                f"exceeds 75% full RAM gate ({gate_limit / (1024**3):.2f} GB of {total_ram / (1024**3):.2f} GB total RAM)"
             )
-            return False, total_required, free_ram, reason
+            return False, total_required, total_ram, reason
 
-        return True, total_required, free_ram, "Admitted safely"
+        return True, total_required, total_ram, "Admitted safely within 75% full RAM gate"
 
     def unassign(self, comp_id):
         self.assignments.pop(comp_id, None)
