@@ -1,7 +1,7 @@
 # Distributed Volunteer Inference Experimental Evaluation Report
 
-**Total Runs Executed:** 160 | **Successful:** 160 | **Failed/OOM:** 0
-**Last Updated:** 2026-08-29 13:47:21
+**Total Runs Executed:** 200 | **Successful:** 200 | **Failed/OOM:** 0
+**Last Updated:** 2026-08-29 16:28:02
 
 ## 1. Executive Summary & Key Findings
 - **Bandwidth Scaling Law:** Network I/O scales strictly linearly with total sequence length (`num_tokens * hidden_size * dtype_size * 2 * num_boundary_crossings`).
@@ -172,3 +172,43 @@
 | Qwen2.5-3B | 4bit | `pipelined_multi_stage` | med_med | 119 | 6.51 | 0.72 | 19.76 MB | 0.17 | 2964.59 MB | 1904.0 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `pipelined_multi_stage` | long_short | 110 | 11.7085 | 0.71 | 16.89 MB | 0.372 | 2964.59 MB | 1760.0 KB | 0.0 MB |
 | Qwen2.5-3B | 4bit | `pipelined_multi_stage` | long_long | 205 | 11.8818 | 0.71 | 33.66 MB | 0.189 | 2964.59 MB | 3280.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `local_baseline` | short_short | 30 | 0.8079 | 6.71 | 0.00 MB | 0.0 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `local_baseline` | short_med | 88 | 0.1622 | 6.46 | 0.00 MB | 0.0 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `local_baseline` | med_med | 119 | 0.1765 | 7.87 | 0.00 MB | 0.0 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `local_baseline` | long_short | 110 | 0.1709 | 8.16 | 0.00 MB | 0.0 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `local_baseline` | long_long | 205 | 0.1492 | 7.85 | 0.00 MB | 0.0 | 0.0 MB | 0.0 KB | 0.0 MB |
+| Qwen2.5-3B | 8bit | `offload_25pct` | short_short | 30 | 2.0888 | 0.75 | 2.48 MB | 0.091 | 1155.2 MB | 261.0 KB | 3192.45 MB |
+| Qwen2.5-3B | 8bit | `offload_25pct` | short_med | 88 | 1.8913 | 0.73 | 7.76 MB | 0.07 | 1155.2 MB | 783.0 KB | 3192.45 MB |
+| Qwen2.5-3B | 8bit | `offload_25pct` | med_med | 119 | 3.5885 | 0.74 | 10.08 MB | 0.092 | 1155.2 MB | 1062.0 KB | 3192.53 MB |
+| Qwen2.5-3B | 8bit | `offload_25pct` | long_short | 110 | 5.3272 | 0.73 | 8.54 MB | 0.224 | 1155.2 MB | 981.0 KB | 3192.65 MB |
+| Qwen2.5-3B | 8bit | `offload_25pct` | long_long | 205 | 5.7134 | 0.72 | 17.14 MB | 0.101 | 1155.2 MB | 1836.0 KB | 3192.65 MB |
+| Qwen2.5-3B | 8bit | `offload_50pct` | short_short | 30 | 3.7655 | 0.41 | 4.96 MB | 0.098 | 1816.81 MB | 522.0 KB | 4052.66 MB |
+| Qwen2.5-3B | 8bit | `offload_50pct` | short_med | 88 | 4.2936 | 0.39 | 15.52 MB | 0.075 | 1816.81 MB | 1566.0 KB | 4052.66 MB |
+| Qwen2.5-3B | 8bit | `offload_50pct` | med_med | 119 | 8.6196 | 0.4 | 20.16 MB | 0.097 | 1816.81 MB | 2124.0 KB | 4052.66 MB |
+| Qwen2.5-3B | 8bit | `offload_50pct` | long_short | 110 | 12.5364 | 0.4 | 17.09 MB | 0.234 | 1816.81 MB | 1962.0 KB | 4052.66 MB |
+| Qwen2.5-3B | 8bit | `offload_50pct` | long_long | 205 | 11.253 | 0.39 | 34.27 MB | 0.109 | 1816.81 MB | 3672.0 KB | 4052.66 MB |
+| Qwen2.5-3B | 8bit | `offload_75pct` | short_short | 30 | 5.6701 | 0.26 | 7.45 MB | 0.094 | 2478.43 MB | 783.0 KB | 4697.66 MB |
+| Qwen2.5-3B | 8bit | `offload_75pct` | short_med | 88 | 6.3968 | 0.26 | 23.28 MB | 0.076 | 2478.43 MB | 2349.0 KB | 4697.66 MB |
+| Qwen2.5-3B | 8bit | `offload_75pct` | med_med | 119 | 9.1308 | 0.26 | 30.23 MB | 0.096 | 2478.43 MB | 3186.0 KB | 4697.66 MB |
+| Qwen2.5-3B | 8bit | `offload_75pct` | long_short | 110 | 14.3806 | 0.27 | 25.63 MB | 0.252 | 2478.43 MB | 2943.0 KB | 4697.66 MB |
+| Qwen2.5-3B | 8bit | `offload_75pct` | long_long | 205 | 16.6397 | 0.23 | 51.41 MB | 0.097 | 2478.43 MB | 5508.0 KB | 4697.66 MB |
+| Qwen2.5-3B | 8bit | `offload_all_layers` | short_short | 30 | 8.8734 | 0.17 | 9.93 MB | 0.082 | 3140.04 MB | 1044.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `offload_all_layers` | short_med | 88 | 9.1911 | 0.17 | 31.04 MB | 0.065 | 3140.04 MB | 3132.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `offload_all_layers` | med_med | 119 | 19.1643 | 0.17 | 40.31 MB | 0.081 | 3140.04 MB | 4248.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `offload_all_layers` | long_short | 110 | 31.3614 | 0.17 | 34.17 MB | 0.195 | 3140.04 MB | 3924.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `offload_all_layers` | long_long | 205 | 35.655 | 0.17 | 68.54 MB | 0.091 | 3140.04 MB | 7344.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_attn_10` | short_short | 30 | 1.9157 | 1.31 | 2.76 MB | 0.168 | 3140.04 MB | 290.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_attn_10` | short_med | 88 | 1.7168 | 1.31 | 8.63 MB | 0.139 | 3140.04 MB | 870.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_attn_10` | med_med | 119 | 4.4833 | 1.65 | 11.20 MB | 0.214 | 3140.04 MB | 1180.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_attn_10` | long_short | 110 | 8.4866 | 1.34 | 9.49 MB | 0.359 | 3140.04 MB | 1090.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_attn_10` | long_long | 205 | 4.4172 | 1.36 | 19.05 MB | 0.207 | 3140.04 MB | 2040.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_ffn_10` | short_short | 30 | 2.4648 | 0.57 | 2.44 MB | 0.069 | 3140.04 MB | 0.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_ffn_10` | short_med | 88 | 2.218 | 0.59 | 7.51 MB | 0.055 | 3140.04 MB | 0.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_ffn_10` | med_med | 119 | 5.7627 | 0.59 | 9.93 MB | 0.071 | 3140.04 MB | 0.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_ffn_10` | long_short | 110 | 10.1248 | 0.59 | 8.74 MB | 0.173 | 3140.04 MB | 0.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `hybrid_ffn_10` | long_long | 205 | 11.9531 | 0.6 | 17.00 MB | 0.08 | 3140.04 MB | 0.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `pipelined_multi_stage` | short_short | 30 | 3.5493 | 0.35 | 4.41 MB | 0.077 | 3140.04 MB | 464.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `pipelined_multi_stage` | short_med | 88 | 4.1328 | 0.38 | 13.80 MB | 0.064 | 3140.04 MB | 1392.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `pipelined_multi_stage` | med_med | 119 | 10.1431 | 0.37 | 17.92 MB | 0.079 | 3140.04 MB | 1888.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `pipelined_multi_stage` | long_short | 110 | 15.5007 | 0.38 | 15.19 MB | 0.193 | 3140.04 MB | 1744.0 KB | 5321.17 MB |
+| Qwen2.5-3B | 8bit | `pipelined_multi_stage` | long_long | 205 | 13.6045 | 0.37 | 30.46 MB | 0.09 | 3140.04 MB | 3264.0 KB | 5321.17 MB |

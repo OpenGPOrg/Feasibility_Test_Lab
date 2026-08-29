@@ -195,6 +195,15 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
 
     exp_counter = 0
 
+    # Load existing completed runs to support seamless resumption
+    completed_ids = set()
+    if CSV_FILE.exists():
+        with open(CSV_FILE, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                if r.get("status") == "success":
+                    completed_ids.add(r.get("exp_id"))
+
     for model_name, model_meta in MODELS_CONFIG.items():
         model_id = model_meta["id"]
         model_dir = model_meta["dir"]
@@ -206,20 +215,40 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
             quant_modes = ["4bit", "8bit"]
 
         for quant in quant_modes:
+            # Check if all splits for this quant mode are already completed
+            needed_runs = False
+            for s in splits_dict:
+                for p in PROMPT_SUITES:
+                    exp_idx_test = exp_counter + 1  # test if this or any subsequent is uncompleted
+                    # We will inspect during execution
+            
             print("\n" + "#" * 80)
-            print(f"LOADING MODEL: {model_name} | QUANTIZATION: {quant}")
+            print(f"CHECKING / LOADING MODEL: {model_name} | QUANTIZATION: {quant}")
             print("#" * 80)
 
-            dm = DistributedModel()
-            try:
-                dm.load_model(model_id, model_dir, quant=quant)
-                dm.is_distributed = True
-            except Exception as e:
-                print(f"✗ Failed to load model {model_name} ({quant}): {e}")
-                traceback.print_exc()
-                continue
+            dm = None
 
             for split_name, split_components in splits_dict.items():
+                # Check if all prompts for this split are already completed
+                split_prompt_ids = [
+                    f"EXP_{exp_counter + i + 1:03d}_{model_name}_{quant}_{split_name}_{p}"
+                    for i, p in enumerate(PROMPT_SUITES.keys())
+                ]
+                if all(eid in completed_ids for eid in split_prompt_ids):
+                    print(f"⏩ Skipping fully completed split: {model_name} | {quant} | {split_name} ({len(split_prompt_ids)} runs)")
+                    exp_counter += len(split_prompt_ids)
+                    continue
+
+                if dm is None:
+                    dm = DistributedModel()
+                    try:
+                        dm.load_model(model_id, model_dir, quant=quant)
+                        dm.is_distributed = True
+                    except Exception as e:
+                        print(f"✗ Failed to load model {model_name} ({quant}): {e}")
+                        traceback.print_exc()
+                        break
+
                 dm.assignments.clear()
                 try:
                     worker_node.send_cmd({"cmd": "clear_kv"})
@@ -253,6 +282,8 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
                     for prompt_key, prompt_cfg in PROMPT_SUITES.items():
                         exp_counter += 1
                         exp_id = f"EXP_{exp_counter:03d}_{model_name}_{quant}_{split_name}_{prompt_key}"
+                        if exp_id in completed_ids:
+                            continue
                         row = {
                             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                             "exp_id": exp_id,
@@ -285,6 +316,10 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
                 for prompt_key, prompt_cfg in PROMPT_SUITES.items():
                     exp_counter += 1
                     exp_id = f"EXP_{exp_counter:03d}_{model_name}_{quant}_{split_name}_{prompt_key}"
+                    if exp_id in completed_ids:
+                        print(f"⏩ Skipping completed: {exp_id}")
+                        continue
+
                     prompt_text = prompt_cfg["prompt"]
                     max_tokens = prompt_cfg["max_new_tokens"]
 
@@ -448,8 +483,9 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
                         torch.cuda.empty_cache()
                     time.sleep(0.5)
 
-            dm.cleanup()
-            del dm
+            if dm is not None:
+                dm.cleanup()
+                del dm
             import gc
             gc.collect()
             if torch.cuda.is_available():
