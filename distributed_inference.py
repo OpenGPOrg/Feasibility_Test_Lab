@@ -1209,9 +1209,23 @@ class DistributedModel:
             except Exception:
                 pass
 
-        # 4. Run each layer
-        for i in range(self.num_layers):
+        # 4. Run layers (with contiguous stage batching for consecutive remote layers)
+        i = 0
+        while i < self.num_layers:
+            lid = f"layer_{i}"
+            if lid in self.assignments:
+                node = self.assignments[lid]["node"]
+                # Look ahead for contiguous layers assigned to the exact same remote node
+                j = i + 1
+                while j < self.num_layers and f"layer_{j}" in self.assignments and self.assignments[f"layer_{j}"]["node"] == node:
+                    j += 1
+                if j - i > 1:
+                    # Chained remote stage: 1 network round-trip for layers i..j-1
+                    hidden = self._remote_stage(i, j - 1, node, hidden, position_ids, pos_emb)
+                    i = j
+                    continue
             hidden = self._run_layer(i, hidden, position_ids, pos_emb)
+            i += 1
 
         # 5. Norm + LM head
         if "lm_head" in self.assignments:
@@ -1330,6 +1344,35 @@ class DistributedModel:
                         except Exception:
                             continue
             raise e
+
+    def _remote_stage(self, start_idx, end_idx, node, hidden, position_ids, pos_emb):
+        """Send hidden_states to remote worker for a contiguous sequence of layers in 1 network round-trip."""
+        target_dt = torch.bfloat16 if getattr(self, "config", {}).get("torch_dtype") == "bfloat16" else hidden.dtype
+        hs_cpu = hidden.to(dtype=target_dt).cpu()
+        comp_ids = [f"layer_{k}" for k in range(start_idx, end_idx + 1)]
+        msg = {
+            "cmd": "forward_stage",
+            "start_layer": start_idx,
+            "end_layer": end_idx,
+            "component_ids": comp_ids,
+            "hidden_states": hs_cpu,
+            "position_ids": position_ids.cpu(),
+        }
+        if pos_emb is not None:
+            msg["position_embeddings"] = tuple(p.to(dtype=target_dt).cpu() if isinstance(p, torch.Tensor) else p for p in pos_emb)
+
+        try:
+            resp = self._send_cmd_with_dtype_recovery(node, msg)
+            if isinstance(resp, dict) and resp.get("status") == "ok" and "hidden_states" in resp:
+                return resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
+        except Exception:
+            pass
+
+        # Graceful fallback to per-layer forward if remote worker lacks forward_stage
+        curr_hidden = hidden
+        for k in range(start_idx, end_idx + 1):
+            curr_hidden = self._remote_layer(k, curr_hidden, position_ids, pos_emb)
+        return curr_hidden
 
     def _remote_layer(self, idx, hidden, position_ids, pos_emb):
         """Send hidden_states to remote worker for full layer forward."""

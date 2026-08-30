@@ -307,6 +307,7 @@ class Worker:
                 "clear_kv":          self._cmd_clear_kv,
                 "get_memory":        self._cmd_get_memory,
                 "forward_layer":     self._cmd_forward_layer,
+                "forward_stage":     self._cmd_forward_stage,
                 "forward_attention": self._cmd_forward_attention,
                 "forward_ffn":       self._cmd_forward_ffn,
                 "forward_expert":    self._cmd_forward_expert,
@@ -585,6 +586,45 @@ class Worker:
 
         self.stats["forward_calls"] += 1
         return {"status": "ok", "hidden_states": hidden_out}
+
+    def _cmd_forward_stage(self, msg):
+        """Execute a contiguous sequence of layers locally on the worker without intermediate network hops."""
+        component_ids = msg.get("component_ids")
+        if not component_ids:
+            start_l = msg.get("start_layer")
+            end_l = msg.get("end_layer")
+            if start_l is not None and end_l is not None:
+                component_ids = [f"layer_{i}" for i in range(start_l, end_l + 1)]
+            else:
+                return {"status": "error", "msg": "Missing component_ids or start/end layer"}
+
+        hs = msg["hidden_states"]
+        pos_ids = msg.get("position_ids")
+        raw_pos_emb = msg.get("position_embeddings")
+
+        with torch.no_grad():
+            for comp_id in component_ids:
+                module = self.components.get(comp_id)
+                if module is None:
+                    return {"status": "error", "msg": f"Layer not found on worker: {comp_id}"}
+
+                hs = _match_dtype(hs, module)
+                pos_emb = _match_tuple_dtype(raw_pos_emb, module)
+                cache = self._get_cache(comp_id)
+
+                kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
+                if pos_emb is not None:
+                    kwargs["position_embeddings"] = pos_emb
+
+                outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
+                hs = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+
+                if not isinstance(outputs, torch.Tensor) and len(outputs) > 1 and outputs[1] is not None:
+                    self.kv_caches[comp_id] = outputs[1]
+
+                self.stats["forward_calls"] += 1
+
+        return {"status": "ok", "hidden_states": hs}
 
     def _cmd_forward_attention(self, msg):
         comp_id = msg["component_id"]
