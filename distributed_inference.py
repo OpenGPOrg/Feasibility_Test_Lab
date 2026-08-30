@@ -278,29 +278,41 @@ def _recv_exact(sock, n):
         buf.extend(chunk)
     return bytes(buf)
 
+def _to_cpu_recursive(obj):
+    """Recursively detach and convert all tensors to device-agnostic CPU storage before network serialization."""
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu()
+    elif isinstance(obj, dict):
+        return {k: _to_cpu_recursive(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        converted = [_to_cpu_recursive(v) for v in obj]
+        return tuple(converted) if isinstance(obj, tuple) else converted
+    return obj
+
+
 def send_msg(sock, obj):
+    obj = _to_cpu_recursive(obj)
     data = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
     sock.sendall(struct.pack("!Q", len(data)))
     sock.sendall(data)
     return 8 + len(data)
 
-class CPU_Unpickler(pickle.Unpickler):
-    """Custom unpickler that automatically maps any CUDA tensors to CPU on CPU-only hosts."""
+
+class Universal_Unpickler(pickle.Unpickler):
+    """Cross-platform unpickler mapping any remote device storage (CUDA, MPS, XPU, NPU) to CPU."""
     def find_class(self, module, name):
         if module == "torch.storage" and name == "_load_from_bytes":
-            return lambda b: torch.load(io.BytesIO(b), map_location=torch.device("cpu"), weights_only=False)
+            return lambda b: torch.load(io.BytesIO(b), map_location="cpu", weights_only=False)
         return super().find_class(module, name)
+
 
 def recv_msg(sock):
     raw = _recv_exact(sock, 8)
     length = struct.unpack("!Q", raw)[0]
     data = _recv_exact(sock, length)
-    if not torch.cuda.is_available():
-        try:
-            obj = CPU_Unpickler(io.BytesIO(data)).load()
-        except Exception:
-            obj = pickle.loads(data)
-    else:
+    try:
+        obj = Universal_Unpickler(io.BytesIO(data)).load()
+    except Exception:
         obj = pickle.loads(data)
     return obj, 8 + length
 
