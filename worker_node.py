@@ -36,6 +36,26 @@ RECV_BUF = 1 << 16  # 64 KB
 COMPONENT_CACHE_DIR = Path.home() / ".dist_inference_cache"
 
 
+def _get_gpu_info():
+    """Detect NVIDIA CUDA or Apple Silicon Metal (MPS) GPU device."""
+    if torch.cuda.is_available():
+        props = torch.cuda.get_device_properties(0)
+        return f"{torch.cuda.get_device_name(0)} ({props.total_memory / (1024**3):.1f} GB)"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "Apple Silicon GPU (Metal Performance Shaders / MPS)"
+    return None
+
+
+def _detect_device(override=None):
+    if override and override != "auto":
+        return torch.device(override)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Protocol
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -149,9 +169,10 @@ def _match_tuple_dtype(tup, module):
 # Worker
 # ═══════════════════════════════════════════════════════════════════════════════
 class Worker:
-    def __init__(self, port):
+    def __init__(self, port, device="auto"):
         self.port = port
         self.hostname = platform.node()
+        self.device = _detect_device(device)
         self.components = {}     # comp_id → nn.Module
         self.kv_caches = {}      # comp_id → DynamicCache or None
         self.comp_types = {}     # comp_id → str (layer, attention, ffn, expert, embedding, lm_head)
@@ -177,7 +198,7 @@ class Worker:
         try:
             path = self._cache_path(comp_id, model_id or "default")
             torch.save({
-                "module": module,
+                "module": module.cpu(),
                 "comp_id": comp_id,
                 "model_id": model_id or "default",
                 "comp_type": self.comp_types.get(comp_id, "unknown"),
@@ -198,7 +219,7 @@ class Worker:
                         name = f.stem
                         parts = name.split("_", 1)
                         comp_id = parts[1] if len(parts) == 2 else name
-                    module = data["module"].cpu().eval()
+                    module = data["module"].to(self.device).eval()
                     self.components[comp_id] = module
                     self.comp_types[comp_id] = data.get("comp_type", "unknown")
                     self.kv_caches[comp_id] = None
@@ -214,13 +235,12 @@ class Worker:
         print(f"\033[1;96m{'═' * 55}")
         print(f"  Worker Node: {self.hostname}")
         print(f"  Port:        {self.port}")
+        print(f"  Device:      {self.device}")
         print(f"  CPU:         {platform.processor() or 'Unknown'}")
         print(f"  Cores:       {psutil.cpu_count(logical=True)}")
         print(f"  RAM:         {psutil.virtual_memory().total / (1024**3):.1f} GB")
-        gpu = "None"
-        if torch.cuda.is_available():
-            gpu = f"{torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f} GB)"
-        print(f"  GPU:         {gpu}")
+        gpu = _get_gpu_info() or "None"
+        print(f"  GPU/Accel:   {gpu}")
         print(f"{'═' * 55}\033[0m")
 
         # Start UDP discovery broadcast
@@ -332,7 +352,8 @@ class Worker:
             "ram_free": psutil.virtual_memory().available,
             "cpu": platform.processor() or "Unknown",
             "cores": psutil.cpu_count(logical=True),
-            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "device": str(self.device),
+            "gpu": _get_gpu_info(),
             "components": list(self.components.keys()),
         }
 
@@ -348,6 +369,7 @@ class Worker:
             }
         return {
             "status": "ok",
+            "device": str(self.device),
             "components": comp_info,
             "ram_free": psutil.virtual_memory().available,
             "stats": dict(self.stats),
@@ -367,14 +389,14 @@ class Worker:
             gc.collect()
 
         self.loaded_model_id = model_id
-        module = module.cpu().eval()
+        module = module.to(self.device).eval()
         self.components[comp_id] = module
         self.comp_types[comp_id] = comp_type
         self.kv_caches[comp_id] = None
 
         size = sum(p.numel() * p.element_size() for p in module.parameters())
         self._save_component(comp_id, module, model_id)
-        print(f"  ✓ Loaded: {comp_id} [{model_id}] ({comp_type}, {type(module).__name__}, "
+        print(f"  ✓ Loaded on {self.device}: {comp_id} [{model_id}] ({comp_type}, {type(module).__name__}, "
               f"{size / 1024**2:.1f} MB)")
         return {"status": "ok", "size_bytes": size}
 
@@ -415,7 +437,14 @@ class Worker:
         except Exception:
             pass
 
-        vram_alloc = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        vram_alloc = 0
+        if torch.cuda.is_available():
+            vram_alloc = torch.cuda.memory_allocated()
+        elif hasattr(torch, "mps") and hasattr(torch.mps, "current_allocated_memory"):
+            try:
+                vram_alloc = torch.mps.current_allocated_memory()
+            except Exception:
+                pass
         return {
             "status": "ok",
             "layer_bytes": layer_bytes,
@@ -485,6 +514,13 @@ class Worker:
 
     def _run_module_safe(self, module, hs, pos_emb, kwargs):
         """Execute a module with multi-stage signature handling and automatic dtype mismatch recovery."""
+        # Ensure inputs are on the worker device (CUDA, Apple Silicon MPS, or CPU)
+        hs = hs.to(self.device)
+        if pos_emb is not None:
+            pos_emb = tuple(p.to(self.device) if isinstance(p, torch.Tensor) else p for p in pos_emb)
+        if kwargs.get("position_ids") is not None and isinstance(kwargs["position_ids"], torch.Tensor):
+            kwargs["position_ids"] = kwargs["position_ids"].to(self.device)
+
         def _try_call(curr_hs, curr_pos_emb, curr_kwargs):
             k = dict(curr_kwargs)
             # Strategy 1: Standard full keyword args
@@ -585,7 +621,7 @@ class Worker:
             self.kv_caches[comp_id] = outputs[1]
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "hidden_states": hidden_out}
+        return {"status": "ok", "hidden_states": hidden_out.cpu() if isinstance(hidden_out, torch.Tensor) else hidden_out}
 
     def _cmd_forward_stage(self, msg):
         """Execute a contiguous sequence of layers locally on the worker without intermediate network hops."""
@@ -624,7 +660,7 @@ class Worker:
 
                 self.stats["forward_calls"] += 1
 
-        return {"status": "ok", "hidden_states": hs}
+        return {"status": "ok", "hidden_states": hs.cpu() if isinstance(hs, torch.Tensor) else hs}
 
     def _cmd_forward_attention(self, msg):
         comp_id = msg["component_id"]
@@ -648,7 +684,7 @@ class Worker:
             self.kv_caches[comp_id] = outputs[2]
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "hidden_states": attn_out}
+        return {"status": "ok", "hidden_states": attn_out.cpu() if isinstance(attn_out, torch.Tensor) else attn_out}
 
     def _cmd_forward_ffn(self, msg):
         comp_id = msg["component_id"]
@@ -658,12 +694,12 @@ class Worker:
 
         hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
-            out = module(hs)
+            out = module(hs.to(self.device))
         # MoE blocks return (output, router_logits); dense MLPs return tensor
         hidden_out = out[0] if isinstance(out, tuple) else out
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "hidden_states": hidden_out}
+        return {"status": "ok", "hidden_states": hidden_out.cpu() if isinstance(hidden_out, torch.Tensor) else hidden_out}
 
     def _cmd_forward_expert(self, msg):
         comp_id = msg["component_id"]
@@ -673,10 +709,10 @@ class Worker:
 
         hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
-            out = module(hs)
+            out = module(hs.to(self.device))
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "hidden_states": out}
+        return {"status": "ok", "hidden_states": out.cpu() if isinstance(out, torch.Tensor) else out}
 
     def _cmd_forward_embedding(self, msg):
         comp_id = msg["component_id"]
@@ -686,10 +722,10 @@ class Worker:
 
         input_ids = msg["input_ids"]
         with torch.no_grad():
-            out = module(input_ids)
+            out = module(input_ids.to(self.device) if isinstance(input_ids, torch.Tensor) else input_ids)
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "hidden_states": out}
+        return {"status": "ok", "hidden_states": out.cpu() if isinstance(out, torch.Tensor) else out}
 
     def _cmd_forward_lm_head(self, msg):
         comp_id = msg["component_id"]
@@ -699,10 +735,10 @@ class Worker:
 
         hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
-            logits = module(hs)
+            logits = module(hs.to(self.device))
 
         self.stats["forward_calls"] += 1
-        return {"status": "ok", "logits": logits}
+        return {"status": "ok", "logits": logits.cpu() if isinstance(logits, torch.Tensor) else logits}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -713,9 +749,11 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="TCP port (default: 9900)")
     parser.add_argument("--broadcast", type=str, default="255.255.255.255",
                         help="Broadcast address for UDP discovery (default: 255.255.255.255)")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"],
+                        help="Compute accelerator device (auto, cpu, cuda, mps) (default: auto)")
     args = parser.parse_args()
 
-    worker = Worker(args.port)
+    worker = Worker(args.port, device=args.device)
     worker.broadcast_addr = args.broadcast
     try:
         worker.start()
