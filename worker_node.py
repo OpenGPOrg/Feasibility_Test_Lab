@@ -489,12 +489,12 @@ class Worker:
             try:
                 cached_data = torch.load(cache_path, map_location="cpu", weights_only=True)
                 module.load_state_dict(cached_data["state_dict"])
-                module = module.cpu().eval()
+                module = module.to(self.device).eval()
                 self.components[comp_id] = module
                 self.comp_types[comp_id] = comp_type
                 self.kv_caches[comp_id] = None
                 size = sum(p.numel() * p.element_size() for p in module.parameters())
-                print(f"  ✓ Loaded from cache: {comp_id} ({size / 1024**2:.1f} MB)")
+                print(f"  ✓ Loaded from cache onto {self.device}: {comp_id} ({size / 1024**2:.1f} MB)")
                 return {"status": "ok", "size_bytes": size, "from_cache": True}
             except Exception as e:
                 print(f"  ⚠ Cache load failed for {comp_id}: {e}, loading fresh")
@@ -514,7 +514,8 @@ class Worker:
 
     def _run_module_safe(self, module, hs, pos_emb, kwargs):
         """Execute a module with multi-stage signature handling and automatic dtype mismatch recovery."""
-        # Ensure inputs are on the worker device (CUDA, Apple Silicon MPS, or CPU)
+        # Ensure module and inputs are strictly on the active worker device (CUDA, Apple Silicon MPS, or CPU)
+        module = module.to(self.device)
         hs = hs.to(self.device)
         if pos_emb is not None:
             pos_emb = tuple(p.to(self.device) if isinstance(p, torch.Tensor) else p for p in pos_emb)
