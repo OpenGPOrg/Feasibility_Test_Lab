@@ -187,12 +187,11 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
     # Verify worker connection
     worker_node = NodeConnection(worker_host, worker_port, "Worker-Node")
     try:
-        worker_node.connect(timeout=3.0)
+        worker_node.connect(timeout=2.0)
         info = worker_node.send_cmd({"cmd": "info"})
         print(f"✓ Connected to worker: {info.get('hostname', '?')} (RAM Free: {fmt_bytes(info.get('ram_free', 0))})")
     except Exception as e:
-        print(f"✗ Failed to connect to worker {worker_host}:{worker_port}: {e}")
-        return
+        print(f"⚠ Note: Worker {worker_host}:{worker_port} not connected ({e}). Local topologies will still run.")
 
     exp_counter = 0
 
@@ -249,7 +248,8 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
 
                 dm.assignments.clear()
                 try:
-                    worker_node.send_cmd({"cmd": "clear_kv"})
+                    if worker_node.is_connected():
+                        worker_node.send_cmd({"cmd": "clear_kv"})
                 except Exception:
                     pass
 
@@ -271,40 +271,41 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
 
                 print(f"\n--- Topology [{split_name}]: {comp_str} ---")
 
-                # Pre-flight Predictive Memory Admission Control
-                can_admit, req_bytes, free_bytes, reason = dm.check_worker_memory_admission(
-                    worker_node, split_components, max_sequence_len=300
-                )
-                if not can_admit:
-                    print(f"⏩ OOM PREVENTED: Skipping topology {split_name} on {worker_label} -> {reason}")
-                    for prompt_key, prompt_cfg in PROMPT_SUITES.items():
-                        if (model_name, quant, split_name, prompt_key) in completed_keys:
-                            continue
-                        exp_counter += 1
-                        exp_id = f"EXP_{exp_counter:03d}_{model_name}_{quant}_{split_name}_{prompt_key}"
-                        row = {
-                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                            "exp_id": exp_id,
-                            "model": model_name,
-                            "quant": quant,
-                            "split_name": split_name,
-                            "prompt_type": prompt_key,
-                            "total_sequence": 0, "ttft_sec": 0, "prefill_tps": 0,
-                            "decode_time_sec": 0, "decode_tps": 0, "total_time_sec": 0,
-                            "p50_latency_ms": 0, "p90_latency_ms": 0, "p99_latency_ms": 0,
-                            "net_sent_bytes": 0, "net_recv_bytes": 0, "net_total_bytes": 0,
-                            "net_rate_mb_s": 0, "net_per_token_kb": 0,
-                            "master_layer_mb": 0, "master_kv_kb": 0,
-                            "master_vram_after_mb": 0, "master_vram_delta_mb": 0,
-                            "worker_layer_mb": 0, "worker_kv_kb": 0,
-                            "worker_ram_mb": round(free_bytes/(1024**2), 2),
-                            "worker_vram_mb": 0,
-                            "status": "skipped",
-                            "error": f"Pre-flight OOM Prevention: {reason}"
-                        }
-                        append_csv(row)
-                    generate_markdown_summary()
-                    continue
+                # Pre-flight Predictive Memory Admission Control (if using remote worker)
+                if split_components:
+                    can_admit, req_bytes, free_bytes, reason = dm.check_worker_memory_admission(
+                        worker_node, split_components, max_sequence_len=300
+                    )
+                    if not can_admit:
+                        print(f"⏩ OOM PREVENTED: Skipping topology {split_name} on {worker_label} -> {reason}")
+                        for prompt_key, prompt_cfg in PROMPT_SUITES.items():
+                            if (model_name, quant, split_name, prompt_key) in completed_keys:
+                                continue
+                            exp_counter += 1
+                            exp_id = f"EXP_{exp_counter:03d}_{model_name}_{quant}_{split_name}_{prompt_key}"
+                            row = {
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                "exp_id": exp_id,
+                                "model": model_name,
+                                "quant": quant,
+                                "split_name": split_name,
+                                "prompt_type": prompt_key,
+                                "total_sequence": 0, "ttft_sec": 0, "prefill_tps": 0,
+                                "decode_time_sec": 0, "decode_tps": 0, "total_time_sec": 0,
+                                "p50_latency_ms": 0, "p90_latency_ms": 0, "p99_latency_ms": 0,
+                                "net_sent_bytes": 0, "net_recv_bytes": 0, "net_total_bytes": 0,
+                                "net_rate_mb_s": 0, "net_per_token_kb": 0,
+                                "master_layer_mb": 0, "master_kv_kb": 0,
+                                "master_vram_after_mb": 0, "master_vram_delta_mb": 0,
+                                "worker_layer_mb": 0, "worker_kv_kb": 0,
+                                "worker_ram_mb": round(free_bytes/(1024**2), 2),
+                                "worker_vram_mb": 0,
+                                "status": "skipped",
+                                "error": f"Pre-flight OOM Prevention: {reason}"
+                            }
+                            append_csv(row)
+                        generate_markdown_summary()
+                        continue
 
                 try:
                     dm.apply_distribution()
@@ -362,22 +363,24 @@ def run_experiment_matrix(worker_host="192.168.8.130", worker_port=9900):
                     try:
                         dm.local_kv = {}
                         dm.total_past_len = 0
-                        try:
-                            worker_node.send_cmd({"cmd": "clear_kv"})
-                        except Exception:
-                            pass
+                        if split_components:
+                            try:
+                                worker_node.send_cmd({"cmd": "clear_kv"})
+                            except Exception:
+                                pass
 
                         t_start = time.perf_counter()
                         stats = dm.generate(prompt_text, max_new_tokens=max_tokens, temperature=0.0)
                         t_end = time.perf_counter()
 
                         worker_mem = {}
-                        try:
-                            w_resp = worker_node.send_cmd({"cmd": "get_memory"})
-                            if w_resp.get("status") == "ok":
-                                worker_mem = w_resp
-                        except Exception:
-                            pass
+                        if split_components:
+                            try:
+                                w_resp = worker_node.send_cmd({"cmd": "get_memory"})
+                                if w_resp.get("status") == "ok":
+                                    worker_mem = w_resp
+                            except Exception:
+                                pass
 
                         num_in = stats.get("num_input", 0)
                         num_out = stats.get("num_output", 0)

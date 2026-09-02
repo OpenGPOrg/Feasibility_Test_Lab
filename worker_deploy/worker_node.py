@@ -179,8 +179,9 @@ def _match_tuple_dtype(tup, module):
 # Worker
 # ═══════════════════════════════════════════════════════════════════════════════
 class Worker:
-    def __init__(self, port, device="auto"):
+    def __init__(self, port=DEFAULT_PORT, device="auto", connect_target=None):
         self.port = port
+        self.connect_target = connect_target
         self.hostname = platform.node()
         self.device = _detect_device(device)
         self.components = {}     # comp_id → nn.Module
@@ -190,12 +191,34 @@ class Worker:
         self.lock = threading.Lock()
         self.stats = {"bytes_sent": 0, "bytes_received": 0, "forward_calls": 0}
         self.broadcast_addr = "255.255.255.255"  # works on any network
+        self.peer_sockets = {}  # "host:port" -> socket for direct peer-to-peer ring pipeline
 
         self.loaded_model_id = None
 
         # Component disk cache
         self.cache_dir = COMPONENT_CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_peer_socket(self, host, port):
+        """Get or establish a persistent direct TCP socket to a peer worker node over LAN."""
+        key = f"{host}:{port}"
+        sock = self.peer_sockets.get(key)
+        if sock is not None:
+            try:
+                sock.getpeername()
+                return sock
+            except Exception:
+                try: sock.close()
+                except Exception: pass
+                self.peer_sockets.pop(key, None)
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        sock.settimeout(60.0)
+        sock.connect((host, port))
+        self.peer_sockets[key] = sock
+        return sock
 
     def _cache_path(self, comp_id, model_id=""):
         """Get the disk cache path for a component scoped by model_id."""
@@ -218,25 +241,27 @@ class Worker:
 
     def _load_cached_for_model(self, model_id):
         """Load cached components for a specific model from disk."""
+        if not self.cache_dir.exists():
+            return
         safe_model = (model_id or "default").replace("/", "_").replace("\\", "_")
+        prefix = f"{safe_model}_"
         loaded_count = 0
-        for f in self.cache_dir.glob(f"{safe_model}_*.pt"):
+        for path in self.cache_dir.glob(f"{prefix}*.pt"):
             try:
-                data = torch.load(f, map_location="cpu", weights_only=False)
-                if isinstance(data, dict) and "module" in data:
-                    comp_id = data.get("comp_id")
-                    if not comp_id:
-                        name = f.stem
-                        parts = name.split("_", 1)
-                        comp_id = parts[1] if len(parts) == 2 else name
-                    module = data["module"].to(self.device).eval()
-                    self.components[comp_id] = module
-                    self.comp_types[comp_id] = data.get("comp_type", "unknown")
+                data = torch.load(path, map_location="cpu", weights_only=False)
+                comp_id = data["comp_id"]
+                module = data["module"]
+                comp_type = data.get("comp_type", "unknown")
+                if hasattr(module, "to"):
+                    module = module.to(self.device).eval()
+                self.components[comp_id] = module
+                self.comp_types[comp_id] = comp_type
+                if comp_type in ("layer", "attention"):
                     self.kv_caches[comp_id] = None
-                    loaded_count += 1
+                loaded_count += 1
             except Exception as e:
-                print(f"  ⚠ Failed to load cache file {f.name}: {e}")
-        if loaded_count:
+                print(f"  ⚠ Failed to load cached component from {path}: {e}")
+        if loaded_count > 0:
             self.loaded_model_id = model_id
             print(f"  ✓ Loaded {loaded_count} cached component(s) from disk for model '{model_id}'")
 
@@ -244,7 +269,12 @@ class Worker:
     def start(self):
         print(f"\033[1;96m{'═' * 55}")
         print(f"  Worker Node: {self.hostname}")
-        print(f"  Port:        {self.port}")
+        if self.connect_target:
+            print(f"  Mode:        Reverse Connection (Outbound to Master)")
+            print(f"  Master Target: {self.connect_target}")
+        else:
+            print(f"  Mode:        Direct Server (Listening)")
+            print(f"  Port:        {self.port}")
         print(f"  Device:      {self.device}")
         print(f"  CPU:         {platform.processor() or 'Unknown'}")
         print(f"  Cores:       {psutil.cpu_count(logical=True)}")
@@ -253,13 +283,72 @@ class Worker:
         print(f"  GPU/Accel:   {gpu}")
         print(f"{'═' * 55}\033[0m")
 
-        # Start UDP discovery broadcast
-        t = threading.Thread(target=self._discovery_loop, daemon=True)
-        t.start()
-        print(f"  ✓ Discovery broadcast on UDP port {DISC_PORT}")
+        if self.connect_target:
+            if ":" in self.connect_target:
+                m_host, m_port_str = self.connect_target.split(":", 1)
+                m_port = int(m_port_str)
+            else:
+                m_host = self.connect_target
+                m_port = DEFAULT_PORT
+            self._connect_to_master(m_host, m_port)
+        else:
+            # Start UDP discovery broadcast
+            t = threading.Thread(target=self._discovery_loop, daemon=True)
+            t.start()
+            print(f"  ✓ Discovery broadcast on UDP port {DISC_PORT}")
 
-        # Start TCP server
-        self._serve()
+            # Start TCP server
+            self._serve()
+
+    def _connect_to_master(self, master_host, master_port):
+        """Reverse connection mode — connects outbound to master coordinator to bypass firewalls/UFW."""
+        print(f"  ⚡ Reverse Connection Mode Active")
+        print(f"  Dialing outbound to Master: {master_host}:{master_port} (Bypassing UFW/NAT)...")
+
+        while self.running:
+            sock = None
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                sock.settimeout(5.0)
+                sock.connect((master_host, master_port))
+                sock.settimeout(None)
+                print(f"  ✓ Connected outbound to Master at {master_host}:{master_port}!")
+
+                # Send initial registration handshake
+                handshake = {
+                    "cmd": "register_reverse_worker",
+                    "hostname": self.hostname,
+                    "device": str(self.device),
+                    "ram_total": psutil.virtual_memory().total,
+                    "ram_free": psutil.virtual_memory().available,
+                    "cpu": platform.processor() or "Unknown",
+                    "cores": psutil.cpu_count(logical=True),
+                    "gpu": _get_gpu_info(),
+                }
+                send_msg(sock, handshake)
+                resp, _ = recv_msg(sock)
+                if resp.get("status") != "ok":
+                    print(f"  ✗ Master handshake rejected: {resp.get('msg')}")
+                    sock.close()
+                    time.sleep(3)
+                    continue
+
+                print(f"  ✓ Handshake accepted by Master. Ready for inference!\n")
+                self._handle(sock, (master_host, master_port))
+            except (ConnectionRefusedError, socket.timeout, OSError) as e:
+                if sock:
+                    try: sock.close()
+                    except: pass
+                print(f"  ⏳ Waiting for Master at {master_host}:{master_port}... ({e})")
+                time.sleep(3)
+            except Exception as e:
+                if sock:
+                    try: sock.close()
+                    except: pass
+                print(f"  ✗ Connection error: {e}")
+                time.sleep(3)
 
     def _discovery_loop(self):
         """Broadcast presence via UDP every 3 seconds."""
@@ -336,9 +425,10 @@ class Worker:
                 "unload":            self._cmd_unload,
                 "clear_kv":          self._cmd_clear_kv,
                 "get_memory":        self._cmd_get_memory,
-                "forward_layer":     self._cmd_forward_layer,
-                "forward_stage":     self._cmd_forward_stage,
-                "forward_attention": self._cmd_forward_attention,
+                "forward_layer":           self._cmd_forward_layer,
+                "forward_stage":           self._cmd_forward_stage,
+                "pipeline_forward_chain":  self._cmd_pipeline_forward_chain,
+                "forward_attention":       self._cmd_forward_attention,
                 "forward_ffn":       self._cmd_forward_ffn,
                 "forward_expert":    self._cmd_forward_expert,
                 "forward_embedding": self._cmd_forward_embedding,
@@ -673,6 +763,80 @@ class Worker:
 
         return {"status": "ok", "hidden_states": hs.cpu() if isinstance(hs, torch.Tensor) else hs}
 
+    def _cmd_pipeline_forward_chain(self, msg):
+        """Execute one stage in a direct peer-to-peer ring pipeline and forward directly to the next peer node over LAN."""
+        stages = msg.get("stages", [])
+        stage_idx = msg.get("stage_idx", 0)
+
+        if stage_idx >= len(stages):
+            return {"status": "error", "msg": f"stage_idx {stage_idx} exceeds total stages count {len(stages)}"}
+
+        curr_stage = stages[stage_idx]
+        start_l = curr_stage["start_layer"]
+        end_l = curr_stage["end_layer"]
+        component_ids = [f"layer_{i}" for i in range(start_l, end_l + 1)]
+
+        hs = msg["hidden_states"]
+        pos_ids = msg.get("position_ids")
+        raw_pos_emb = msg.get("position_embeddings")
+
+        # 1. Execute current node's layers locally in RAM/GPU
+        with torch.no_grad():
+            for comp_id in component_ids:
+                module = self.components.get(comp_id)
+                if module is None:
+                    return {"status": "error", "msg": f"Layer not found on worker {self.hostname}: {comp_id}"}
+
+                hs = _match_dtype(hs, module)
+                pos_emb = _match_tuple_dtype(raw_pos_emb, module)
+                cache = self._get_cache(comp_id)
+
+                kwargs = dict(position_ids=pos_ids, past_key_values=cache, use_cache=True, attention_mask=None)
+                if pos_emb is not None:
+                    kwargs["position_embeddings"] = pos_emb
+
+                outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
+                hs = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+
+                if not isinstance(outputs, torch.Tensor) and len(outputs) > 1 and outputs[1] is not None:
+                    self.kv_caches[comp_id] = outputs[1]
+
+                self.stats["forward_calls"] += 1
+
+        # 2. If this is the last stage in the pipeline chain, return final hidden states to caller
+        if stage_idx == len(stages) - 1:
+            return {"status": "ok", "hidden_states": hs.cpu() if isinstance(hs, torch.Tensor) else hs}
+
+        # 3. Forward DIRECTLY to the NEXT peer worker node over LAN (bypassing Master Laptop)
+        next_stage = stages[stage_idx + 1]
+        next_host = next_stage["node_host"]
+        next_port = next_stage["node_port"]
+
+        next_msg = {
+            "cmd": "pipeline_forward_chain",
+            "stages": stages,
+            "stage_idx": stage_idx + 1,
+            "hidden_states": hs.cpu() if isinstance(hs, torch.Tensor) else hs,
+            "position_ids": pos_ids,
+            "position_embeddings": raw_pos_emb,
+        }
+
+        try:
+            peer_sock = self._get_peer_socket(next_host, next_port)
+            send_msg(peer_sock, next_msg)
+            resp, _ = recv_msg(peer_sock)
+            return resp
+        except Exception as e:
+            # If peer connection failed, invalidate cached peer socket and retry once
+            self.peer_sockets.pop(f"{next_host}:{next_port}", None)
+            try:
+                peer_sock = self._get_peer_socket(next_host, next_port)
+                send_msg(peer_sock, next_msg)
+                resp, _ = recv_msg(peer_sock)
+                return resp
+            except Exception as e2:
+                return {"status": "error", "msg": f"P2P direct forward from {self.hostname} to {next_host}:{next_port} failed: {e2}"}
+
     def _cmd_forward_attention(self, msg):
         comp_id = msg["component_id"]
         module = self.components.get(comp_id)
@@ -757,14 +921,16 @@ class Worker:
 # ═══════════════════════════════════════════════════════════════════════════════
 def main():
     parser = argparse.ArgumentParser(description="Worker node for distributed inference")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="TCP port (default: 9900)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="TCP port for listening server (default: 9900)")
+    parser.add_argument("--connect", "-c", type=str, default=None,
+                        help="Connect outbound to Master coordinator (e.g. 192.168.1.50:9900) to bypass UFW/firewalls")
     parser.add_argument("--broadcast", type=str, default="255.255.255.255",
                         help="Broadcast address for UDP discovery (default: 255.255.255.255)")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"],
                         help="Compute accelerator device (auto, cpu, cuda, mps) (default: auto)")
     args = parser.parse_args()
 
-    worker = Worker(args.port, device=args.device)
+    worker = Worker(port=args.port, device=args.device, connect_target=args.connect)
     worker.broadcast_addr = args.broadcast
     try:
         worker.start()

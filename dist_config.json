@@ -6,11 +6,12 @@
     "gb": 6.39
   },
   "model_dir": "/media/vithurshan/vithu/llm/openGP/LoadTime/model_cache/models--Qwen--Qwen2.5-3B/snapshots/3aab1f1954e9cc14eb9509a215f9e5ca08227a9b",
+  "quant": "none",
   "nodes": {
     "192.168.8.130:9900": {
       "host": "192.168.8.130",
       "port": 9900,
-      "hostname": "0fb763324e9d"
+      "hostname": "92e7fa81617e"
     }
   }
 }

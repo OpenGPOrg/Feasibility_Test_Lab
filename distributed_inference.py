@@ -19,7 +19,9 @@ import re
 import socket
 import struct
 import sys
+import threading
 import time
+from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
 
@@ -323,18 +325,23 @@ def recv_msg(sock):
 class NodeConnection:
     """Persistent TCP connection to a worker node with auto-reconnect."""
 
-    def __init__(self, host, port, hostname="unknown"):
+    def __init__(self, host, port, hostname="unknown", existing_sock=None, is_reverse=False):
         self.host = host
         self.port = port
         self.hostname = hostname
-        self.sock = None
+        self.sock = existing_sock
+        self.is_reverse = is_reverse
         self.bytes_sent = 0
         self.bytes_received = 0
-        self.label = f"{hostname} ({host}:{port})"
+        self.label = f"{hostname} ({host}:{port} [reverse])" if is_reverse else f"{hostname} ({host}:{port})"
         self._max_retries = 3
         self._retry_delay = 2  # seconds
 
     def connect(self, timeout=None):
+        if self.is_reverse:
+            if self.is_connected():
+                return
+            raise ConnectionError(f"Reverse worker {self.label} is disconnected. Waiting for worker to reconnect...")
         self.close()  # close any stale socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -347,6 +354,8 @@ class NodeConnection:
 
     def _reconnect(self):
         """Attempt to reconnect to the worker node."""
+        if self.is_reverse:
+            return self.is_connected()
         for attempt in range(self._max_retries):
             try:
                 self.connect()
@@ -398,6 +407,71 @@ class NodeConnection:
         except:
             self.sock = None
             return False
+
+
+class ReverseCoordinatorListener:
+    """Background TCP listener on Master that accepts inbound reverse connections from workers (bypassing UFW)."""
+
+    def __init__(self, port=DEFAULT_PORT, on_worker_connected=None):
+        self.port = port
+        self.on_worker_connected = on_worker_connected
+        self.server_sock = None
+        self.running = False
+        self.thread = None
+
+    def start(self):
+        if self.running:
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self._listen_loop, daemon=True)
+        self.thread.start()
+
+    def _listen_loop(self):
+        try:
+            self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            self.server_sock.bind(("0.0.0.0", self.port))
+            self.server_sock.listen(10)
+        except Exception:
+            self.running = False
+            return
+
+        while self.running:
+            try:
+                conn, addr = self.server_sock.accept()
+                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                threading.Thread(target=self._handle_reverse_worker, args=(conn, addr), daemon=True).start()
+            except Exception:
+                break
+
+    def _handle_reverse_worker(self, conn, addr):
+        try:
+            msg, _ = recv_msg(conn)
+            if isinstance(msg, dict) and msg.get("cmd") == "register_reverse_worker":
+                hostname = msg.get("hostname", f"lab-worker-{addr[0]}")
+                send_msg(conn, {"status": "ok", "msg": f"Registered reverse worker {hostname}"})
+                nc = NodeConnection(
+                    host=addr[0],
+                    port=addr[1],
+                    hostname=hostname,
+                    existing_sock=conn,
+                    is_reverse=True
+                )
+                if self.on_worker_connected:
+                    self.on_worker_connected(nc, msg)
+            else:
+                send_msg(conn, {"status": "error", "msg": "Expected register_reverse_worker handshake"})
+                conn.close()
+        except Exception:
+            try: conn.close()
+            except: pass
+
+    def stop(self):
+        self.running = False
+        if self.server_sock:
+            try: self.server_sock.close()
+            except: pass
 
 
 def discover_nodes(timeout=5.0):
@@ -510,7 +584,10 @@ class DistributedModel:
             )
         elif quant == "8bit" and BitsAndBytesConfig is not None:
             print(f"  {C.CY}Loading model in 8-bit quantization (BitsAndBytes)...{C.RS}")
-            bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+            bnb_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                llm_int8_enable_fp32_cpu_offload=True
+            )
             self.model = AutoModelForCausalLM.from_pretrained(
                 str(model_dir),
                 quantization_config=bnb_config,
@@ -751,6 +828,40 @@ class DistributedModel:
     def unassign(self, comp_id):
         self.assignments.pop(comp_id, None)
 
+    def export_assignments(self):
+        """Export current distribution assignments to a JSON-serializable list."""
+        exported = []
+        for comp_id, info in self.assignments.items():
+            node = info["node"]
+            exported.append({
+                "comp_id": comp_id,
+                "type": info["type"],
+                "layer_idx": info.get("layer_idx"),
+                "expert_idx": info.get("expert_idx"),
+                "node_host": node.host,
+                "node_port": node.port,
+                "node_hostname": getattr(node, "hostname", "unknown"),
+                "node_label": node.label,
+            })
+        return exported
+
+    def import_assignments(self, cached_entries, node_matcher_fn):
+        """Import assignments from cache using a node matcher callback."""
+        self.assignments.clear()
+        restored_count = 0
+        for entry in cached_entries:
+            node = node_matcher_fn(entry)
+            if node is not None:
+                self.assign_to_remote(
+                    entry["comp_id"],
+                    entry["type"],
+                    node,
+                    layer_idx=entry.get("layer_idx"),
+                    expert_idx=entry.get("expert_idx")
+                )
+                restored_count += 1
+        return restored_count
+
     def get_assignment_summary(self):
         """Return a dict: node_label → list of component descriptions."""
         summary = defaultdict(list)
@@ -793,6 +904,93 @@ class DistributedModel:
             gpu = f" + {torch.cuda.get_device_name(0)}"
         summary[f"Local: {my_hostname}{gpu}"] = local
         return dict(summary)
+
+    def start_profiling(self):
+        """Start memory profiling on master and all assigned workers."""
+        self.profiler_running = True
+        self.memory_log = []
+        
+        # Start remote profilers
+        notified_nodes = set()
+        for info in self.assignments.values():
+            node = info["node"]
+            if id(node) not in notified_nodes:
+                try:
+                    node.send_cmd({"cmd": "start_profiling"})
+                    notified_nodes.add(id(node))
+                except Exception as e:
+                    print(f"  ⚠ Failed to start profiling on {node.label}: {e}")
+                    
+        # Start local profiler
+        def _profiler():
+            import os
+            import psutil
+            proc = psutil.Process(os.getpid())
+            start_time = time.time()
+            while self.profiler_running:
+                rss = proc.memory_info().rss / (1024**2)
+                vram = 0
+                if torch.cuda.is_available():
+                    vram = torch.cuda.memory_allocated() / (1024**2)
+                elif hasattr(torch, "mps") and hasattr(torch.mps, "current_allocated_memory"):
+                    try: vram = torch.mps.current_allocated_memory() / (1024**2)
+                    except: pass
+                self.memory_log.append((time.time() - start_time, rss, vram))
+                time.sleep(0.1)
+        import threading
+        self.profiler_thread = threading.Thread(target=_profiler, daemon=True)
+        self.profiler_thread.start()
+        
+    def stop_profiling(self):
+        """Stop memory profiling, save local graph, and stop remote profilers."""
+        self.profiler_running = False
+        if hasattr(self, "profiler_thread") and self.profiler_thread:
+            self.profiler_thread.join(timeout=1.0)
+            self.profiler_thread = None
+            
+        # Plot local memory
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import platform
+            
+            plt.figure(figsize=(10, 5))
+            times = [x[0] for x in self.memory_log]
+            rss = [x[1] for x in self.memory_log]
+            vram = [x[2] for x in self.memory_log]
+            
+            plt.plot(times, rss, label="RAM (RSS) MB", color='blue')
+            if any(v > 0 for v in vram):
+                plt.plot(times, vram, label="VRAM Allocated MB", color='green')
+            
+            plt.title(f"Master Memory Consumption - {platform.node()}")
+            plt.xlabel("Time (s)")
+            plt.ylabel("Memory (MB)")
+            plt.legend()
+            plt.grid(True)
+            
+            out_name = f"master_memory_profile_{int(time.time())}.png"
+            from pathlib import Path
+            out_path = Path.cwd() / out_name
+            plt.savefig(out_path)
+            plt.close()
+            print(f"  📊 Master memory profile saved to {out_path}")
+        except Exception as e:
+            print(f"  ⚠ Failed to plot master memory profile: {e}")
+            
+        # Stop remote profilers
+        notified_nodes = set()
+        for info in self.assignments.values():
+            node = info["node"]
+            if id(node) not in notified_nodes:
+                try:
+                    resp = node.send_cmd({"cmd": "stop_profiling"})
+                    if resp.get("status") == "ok":
+                        print(f"  📊 Worker {node.label} profile saved to {resp.get('saved_path')}")
+                    notified_nodes.add(id(node))
+                except Exception as e:
+                    print(f"  ⚠ Failed to stop profiling on {node.label}: {e}")
 
     # ── Apply Distribution ────────────────────────────────────────────────
     def apply_distribution(self):
@@ -871,25 +1069,97 @@ class DistributedModel:
 
         gc.collect()
 
-        # Try to move remaining local model to GPU
-        if torch.cuda.is_available():
+        # Dynamically calculate remaining local component sizes and offload to GPU VRAM if they fit
+        local_modules = []
+        if "embedding" not in self.assignments and self.embedding is not None:
+            local_modules.append(("embedding", self.embedding))
+        if "lm_head" not in self.assignments:
+            if self.norm is not None:
+                local_modules.append(("norm", self.norm))
+            if self.lm_head is not None:
+                local_modules.append(("lm_head", self.lm_head))
+
+        for i in range(self.num_layers):
+            lid = f"layer_{i}"
+            aid = f"attn_{i}"
+            fid = f"ffn_{i}"
+            if lid in self.assignments:
+                continue
+            layer = self.layers[i]
+            if aid in self.assignments and hasattr(layer, "mlp"):
+                local_modules.append((f"layer_{i}.mlp", layer.mlp))
+                if hasattr(layer, "input_layernorm"):
+                    local_modules.append((f"layer_{i}.input_layernorm", layer.input_layernorm))
+                if hasattr(layer, "post_attention_layernorm"):
+                    local_modules.append((f"layer_{i}.post_attention_layernorm", layer.post_attention_layernorm))
+            elif fid in self.assignments and hasattr(layer, "self_attn"):
+                local_modules.append((f"layer_{i}.self_attn", layer.self_attn))
+                if hasattr(layer, "input_layernorm"):
+                    local_modules.append((f"layer_{i}.input_layernorm", layer.input_layernorm))
+                if hasattr(layer, "post_attention_layernorm"):
+                    local_modules.append((f"layer_{i}.post_attention_layernorm", layer.post_attention_layernorm))
+            else:
+                local_modules.append((f"layer_{i}", layer))
+
+        local_bytes = sum(
+            sum(p.numel() * p.element_size() for p in mod.parameters()) +
+            sum(b.numel() * b.element_size() for b in mod.buffers())
+            for _, mod in local_modules
+        )
+
+        has_gpu = torch.cuda.is_available() or (hasattr(torch.backends, "mps") and torch.backends.mps.is_available())
+        target_gpu_dev = torch.device("cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"))
+
+        if has_gpu and target_gpu_dev.type != "cpu":
             try:
-                if getattr(self, "quant", "none") in ("4bit", "8bit"):
-                    self.local_device = torch.device("cuda")
-                    print(f"  {C.OK} Quantized local components ready on GPU")
-                else:
+                if target_gpu_dev.type == "cuda":
+                    torch.cuda.empty_cache()
                     free_vram = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
-                    model_size = sum(p.numel() * p.element_size() for p in self.model.parameters())
-                    if model_size < free_vram * 0.9:
-                        print(f"  {C.CY}Moving local components to GPU...{C.RS}", end="", flush=True)
-                        self.model.to("cuda")
-                        self.local_device = torch.device("cuda")
-                        print(f"\r  {C.OK} Local components on GPU")
-                    else:
-                        print(f"  {C.WN} Local model ({fmt_bytes(model_size)}) > VRAM. Staying on CPU.")
-                        self.local_device = torch.device("cpu")
+                    # Reserve 200 MB (or 4% of free VRAM) for KV cache & activations headroom
+                    safety_headroom = max(150 * 1024 * 1024, min(300 * 1024 * 1024, int(free_vram * 0.04)))
+                    safe_vram_limit = max(0, free_vram - safety_headroom)
+                else:
+                    # Apple Silicon MPS has unified memory
+                    free_vram = psutil.virtual_memory().available
+                    safety_headroom = 200 * 1024 * 1024
+                    safe_vram_limit = free_vram
+
+                if local_bytes <= safe_vram_limit:
+                    print(f"  {C.CY}Offloading all {len(local_modules)} local component(s) ({fmt_bytes(local_bytes)}) to {target_gpu_dev}...{C.RS}", end="", flush=True)
+                    for name, mod in local_modules:
+                        mod.to(target_gpu_dev)
+                    if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
+                        try: self.rotary_emb.to(target_gpu_dev)
+                        except Exception: pass
+                    self.local_device = target_gpu_dev
+                    print(f"\r  {C.OK} All local components ({fmt_bytes(local_bytes)}) accelerated on {target_gpu_dev} ({fmt_bytes(free_vram)} VRAM total, {fmt_bytes(safety_headroom)} headroom reserved)")
+                else:
+                    # Partial Greedy GPU Offloading: Fit as many local components on GPU as possible!
+                    print(f"  {C.CY}Packing local components into GPU VRAM ({fmt_bytes(safe_vram_limit)} budget)...{C.RS}", end="", flush=True)
+                    gpu_bytes = 0
+                    gpu_mods = []
+                    cpu_mods = []
+                    for name, mod in local_modules:
+                        mod_bytes = sum(p.numel() * p.element_size() for p in mod.parameters()) + sum(b.numel() * b.element_size() for b in mod.buffers())
+                        if gpu_bytes + mod_bytes <= safe_vram_limit:
+                            mod.to(target_gpu_dev)
+                            gpu_bytes += mod_bytes
+                            gpu_mods.append(name)
+                        else:
+                            mod.to("cpu")
+                            cpu_mods.append(name)
+
+                    if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
+                        try: self.rotary_emb.to(target_gpu_dev if gpu_mods else "cpu")
+                        except Exception: pass
+
+                    self.local_device = target_gpu_dev if gpu_mods else torch.device("cpu")
+                    print(f"\r  {C.OK} Hybrid Local Placement: {len(gpu_mods)} component(s) ({fmt_bytes(gpu_bytes)}) on {target_gpu_dev} | {len(cpu_mods)} on CPU")
             except Exception as e:
-                print(f"  {C.WN} GPU placement error: {e}. Staying on CPU.")
+                print(f"\r  {C.WN} GPU placement warning ({e}). Falling back to CPU.")
+                for name, mod in local_modules:
+                    try: mod.to("cpu")
+                    except Exception: pass
                 self.local_device = torch.device("cpu")
         else:
             self.local_device = torch.device("cpu")
@@ -947,6 +1217,7 @@ class DistributedModel:
         pass
 
     # ── Distributed Forward Pass ──────────────────────────────────────────
+    @torch.no_grad()
     def generate(self, prompt, max_new_tokens=128, temperature=0.0):
         """Run distributed autoregressive generation."""
         device = self.local_device
@@ -1203,7 +1474,8 @@ class DistributedModel:
                 })
                 hidden = resp["hidden_states"].to(device)
             else:
-                hidden = self.embedding(input_ids_or_embeds.to(device))
+                emb_dev = next(self.embedding.parameters()).device
+                hidden = self.embedding(input_ids_or_embeds.to(emb_dev))
         else:
             hidden = input_ids_or_embeds.to(device)
 
@@ -1211,31 +1483,66 @@ class DistributedModel:
         seq_len = hidden.shape[1]
         start_pos = self.total_past_len
         position_ids = torch.arange(start_pos, start_pos + seq_len,
-                                    device=device).unsqueeze(0)
+                                    device=hidden.device).unsqueeze(0)
 
         # 3. Position embeddings (RoPE)
         pos_emb = None
         if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
+            rope_dev = hidden.device
+            if hasattr(self.rotary_emb, "inv_freq"):
+                rope_dev = self.rotary_emb.inv_freq.device
             try:
-                pos_emb = self.rotary_emb(hidden, position_ids)
+                pos_emb = self.rotary_emb(hidden.to(rope_dev), position_ids.to(rope_dev))
             except Exception:
                 pass
 
-        # 4. Run layers (with contiguous stage batching for consecutive remote layers)
+        # 4. Run layers (with Direct P2P Ring Pipeline for multi-node contiguous stages)
         i = 0
         while i < self.num_layers:
             lid = f"layer_{i}"
             if lid in self.assignments:
-                node = self.assignments[lid]["node"]
-                # Look ahead for contiguous layers assigned to the exact same remote node
-                j = i + 1
-                while j < self.num_layers and f"layer_{j}" in self.assignments and self.assignments[f"layer_{j}"]["node"] == node:
-                    j += 1
-                if j - i > 1:
-                    # Chained remote stage: 1 network round-trip for layers i..j-1
-                    hidden = self._remote_stage(i, j - 1, node, hidden, position_ids, pos_emb)
-                    i = j
+                # Find all consecutive remote layers across possibly multiple remote nodes
+                chain_stages = []
+                curr_i = i
+                while curr_i < self.num_layers and f"layer_{curr_i}" in self.assignments:
+                    curr_node = self.assignments[f"layer_{curr_i}"]["node"]
+                    next_i = curr_i + 1
+                    while next_i < self.num_layers and f"layer_{next_i}" in self.assignments and self.assignments[f"layer_{next_i}"]["node"] == curr_node:
+                        next_i += 1
+                    chain_stages.append({
+                        "start_layer": curr_i,
+                        "end_layer": next_i - 1,
+                        "node_host": curr_node.host,
+                        "node_port": curr_node.port,
+                        "node": curr_node,
+                    })
+                    curr_i = next_i
+
+                # Multi-node Direct P2P Pipeline Chain
+                if len(chain_stages) > 1:
+                    first_node = chain_stages[0]["node"]
+                    payload_stages = [
+                        {"start_layer": s["start_layer"], "end_layer": s["end_layer"],
+                         "node_host": s["node_host"], "node_port": s["node_port"]}
+                        for s in chain_stages
+                    ]
+                    resp = first_node.send_cmd({
+                        "cmd": "pipeline_forward_chain",
+                        "stages": payload_stages,
+                        "stage_idx": 0,
+                        "hidden_states": hidden.cpu(),
+                        "position_ids": position_ids.cpu(),
+                        "position_embeddings": _to_cpu_recursive(pos_emb),
+                    })
+                    hidden = resp["hidden_states"].to(device)
+                    i = chain_stages[-1]["end_layer"] + 1
                     continue
+                elif len(chain_stages) == 1 and (chain_stages[0]["end_layer"] - chain_stages[0]["start_layer"]) > 0:
+                    # Single-node multi-layer stage
+                    hidden = self._remote_stage(chain_stages[0]["start_layer"], chain_stages[0]["end_layer"], chain_stages[0]["node"], hidden, position_ids, pos_emb)
+                    i = chain_stages[0]["end_layer"] + 1
+                    continue
+
             hidden = self._run_layer(i, hidden, position_ids, pos_emb)
             i += 1
 
@@ -1249,8 +1556,14 @@ class DistributedModel:
             })
             logits = resp["logits"].to(device)
         else:
-            hidden = self.norm(hidden)
-            logits = self.lm_head(hidden)
+            if hasattr(self, "norm") and self.norm is not None:
+                norm_dev = next(self.norm.parameters()).device if list(self.norm.parameters()) else device
+                hidden = self.norm(hidden.to(norm_dev))
+            if hasattr(self, "lm_head") and self.lm_head is not None:
+                head_dev = next(self.lm_head.parameters()).device if list(self.lm_head.parameters()) else device
+                logits = self.lm_head(hidden.to(head_dev))
+            else:
+                logits = hidden
 
         return logits[:, -1, :]
 
@@ -1289,8 +1602,13 @@ class DistributedModel:
         """Run a layer fully locally with per-layer KV cache."""
         from transformers import DynamicCache
 
-        hidden = _match_dtype(hidden, layer)
+        layer_dev = next(layer.parameters()).device
+        hidden = _match_dtype(hidden, layer).to(layer_dev)
+        if position_ids is not None:
+            position_ids = position_ids.to(layer_dev)
         pos_emb = _match_tuple_dtype(pos_emb, layer)
+        if pos_emb is not None:
+            pos_emb = tuple(p.to(layer_dev) if isinstance(p, torch.Tensor) else p for p in pos_emb)
 
         if idx not in self.local_kv:
             self.local_kv[idx] = DynamicCache()
@@ -1328,7 +1646,6 @@ class DistributedModel:
         if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = orig_idx
 
-        import torch
         return outputs if isinstance(outputs, torch.Tensor) else outputs[0]
 
     def _send_cmd_with_dtype_recovery(self, node, msg):
@@ -1405,6 +1722,8 @@ class DistributedModel:
     def _hybrid_attn_remote(self, idx, layer, hidden, position_ids, pos_emb):
         """Attention on remote, FFN locally."""
         # 1. Input layernorm
+        in_norm_dev = next(layer.input_layernorm.parameters()).device if hasattr(layer, "input_layernorm") else self.local_device
+        hidden = hidden.to(in_norm_dev)
         residual = hidden
         hidden = layer.input_layernorm(hidden)
 
@@ -1416,18 +1735,25 @@ class DistributedModel:
             "cmd": "forward_attention",
             "component_id": f"attn_{idx}",
             "hidden_states": hs_cpu,
-            "position_ids": position_ids.cpu(),
+            "position_ids": position_ids.cpu() if position_ids is not None else None,
         }
         if pos_emb is not None:
             msg["position_embeddings"] = tuple(p.to(dtype=target_dt).cpu() if isinstance(p, torch.Tensor) else p for p in pos_emb)
         resp = self._send_cmd_with_dtype_recovery(node, msg)
-        attn_out = resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
-
-        hidden = residual + attn_out
+        
+        post_norm_dev = next(layer.post_attention_layernorm.parameters()).device if hasattr(layer, "post_attention_layernorm") else self.local_device
+        attn_out = resp["hidden_states"].to(post_norm_dev, dtype=hidden.dtype)
+        
+        hidden = residual.to(post_norm_dev) + attn_out
 
         # 3. Local FFN
         residual = hidden
         hidden = layer.post_attention_layernorm(hidden)
+        
+        mlp_dev = next(layer.mlp.parameters()).device if hasattr(layer, "mlp") else self.local_device
+        hidden = hidden.to(mlp_dev)
+        residual = residual.to(mlp_dev)
+        
         mlp_out = layer.mlp(hidden)
         if isinstance(mlp_out, tuple):
             mlp_out = mlp_out[0]
@@ -1439,8 +1765,17 @@ class DistributedModel:
         from transformers import DynamicCache
 
         # 1. Input layernorm + local attention
+        in_norm_dev = next(layer.input_layernorm.parameters()).device if hasattr(layer, "input_layernorm") else self.local_device
+        hidden = hidden.to(in_norm_dev)
         residual = hidden
         hidden = layer.input_layernorm(hidden)
+        
+        attn_dev = next(layer.self_attn.parameters()).device if hasattr(layer, "self_attn") else self.local_device
+        hidden = hidden.to(attn_dev)
+        if position_ids is not None:
+            position_ids = position_ids.to(attn_dev)
+        if pos_emb is not None:
+            pos_emb = tuple(p.to(attn_dev) if isinstance(p, torch.Tensor) else p for p in pos_emb)
 
         if idx not in self.local_kv:
             self.local_kv[idx] = DynamicCache()
@@ -1478,9 +1813,11 @@ class DistributedModel:
         if hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = orig_idx
 
-        hidden = residual + attn_out[0]
+        hidden = residual.to(attn_dev) + attn_out[0]
 
         # 2. Post-norm + remote FFN
+        post_norm_dev = next(layer.post_attention_layernorm.parameters()).device if hasattr(layer, "post_attention_layernorm") else self.local_device
+        hidden = hidden.to(post_norm_dev)
         residual = hidden
         hidden = layer.post_attention_layernorm(hidden)
 
@@ -1491,7 +1828,7 @@ class DistributedModel:
             "component_id": f"ffn_{idx}",
             "hidden_states": hidden.to(dtype=target_dt).cpu(),
         })
-        ffn_out = resp["hidden_states"].to(self.local_device, dtype=hidden.dtype)
+        ffn_out = resp["hidden_states"].to(post_norm_dev, dtype=hidden.dtype)
         hidden = residual + ffn_out
         return hidden
 
@@ -1500,8 +1837,17 @@ class DistributedModel:
         from transformers import DynamicCache
 
         # 1. Attention (local)
+        in_norm_dev = next(layer.input_layernorm.parameters()).device if hasattr(layer, "input_layernorm") else self.local_device
+        hidden = hidden.to(in_norm_dev)
         residual = hidden
         hidden = layer.input_layernorm(hidden)
+        
+        attn_dev = next(layer.self_attn.parameters()).device if hasattr(layer, "self_attn") else self.local_device
+        hidden = hidden.to(attn_dev)
+        if position_ids is not None:
+            position_ids = position_ids.to(attn_dev)
+        if pos_emb is not None:
+            pos_emb = tuple(p.to(attn_dev) if isinstance(p, torch.Tensor) else p for p in pos_emb)
 
         if idx not in self.local_kv:
             self.local_kv[idx] = DynamicCache()
@@ -1531,11 +1877,16 @@ class DistributedModel:
         if hasattr(layer.self_attn, "layer_idx"):
             layer.self_attn.layer_idx = orig_idx
 
-        hidden = residual + attn_out[0]
+        hidden = residual.to(attn_dev) + attn_out[0]
 
         # 2. Post-norm
+        post_norm_dev = next(layer.post_attention_layernorm.parameters()).device if hasattr(layer, "post_attention_layernorm") else self.local_device
+        hidden = hidden.to(post_norm_dev)
         residual = hidden
         hidden = layer.post_attention_layernorm(hidden)
+        
+        router_dev = next(layer.mlp.gate.parameters()).device if hasattr(layer.mlp, "gate") else self.local_device
+        hidden = hidden.to(router_dev)
 
         batch_size, seq_len, hidden_dim = hidden.shape
         hidden_flat = hidden.view(-1, hidden_dim)
@@ -1543,48 +1894,46 @@ class DistributedModel:
         # 3. Router (local)
         router_logits = layer.mlp.gate(hidden_flat)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(
-            routing_weights, self.num_experts_per_tok, dim=-1)
+        routing_weights, selected_experts = torch.topk(routing_weights, layer.mlp.top_k, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         routing_weights = routing_weights.to(hidden.dtype)
 
-        norm_topk = self.config.get("norm_topk_prob", False)
-        if norm_topk:
-            routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
+        final_hidden_states = torch.zeros(
+            (batch_size * seq_len, hidden_dim), dtype=hidden.dtype, device=hidden.device
+        )
 
-        # 4. Run experts (local or remote)
-        expert_mask = F.one_hot(selected_experts, num_classes=self.num_experts)
-        expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, top_k, batch*seq)
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        target_dt = torch.bfloat16 if getattr(self, "config", {}).get("torch_dtype") == "bfloat16" else hidden.dtype
 
-        final_out = torch.zeros_like(hidden_flat)
-
-        for eid in range(self.num_experts):
-            eidx, topx = torch.where(expert_mask[eid])
-            if topx.shape[0] == 0:
+        for expert_idx in range(self.num_experts):
+            idx_list, top_x = torch.where(expert_mask[expert_idx])
+            if idx_list.shape[0] == 0:
                 continue
 
-            expert_input = hidden_flat[None, topx].to(self.local_device)
-
-            if eid in remote_experts:
-                # Remote expert
-                node = remote_experts[eid]["node"]
-                resp = node.send_cmd({
+            top_x_list = top_x.tolist()
+            idx_list = idx_list.tolist()
+            current_state = hidden_flat[None, top_x_list].reshape(-1, hidden_dim)
+            
+            if expert_idx in remote_experts:
+                node = remote_experts[expert_idx]["node"]
+                resp = self._send_cmd_with_dtype_recovery(node, {
                     "cmd": "forward_expert",
-                    "component_id": f"expert_{idx}_{eid}",
-                    "hidden_states": expert_input.cpu(),
+                    "component_id": f"expert_{idx}_{expert_idx}",
+                    "hidden_states": current_state.to(dtype=target_dt).cpu(),
                 })
-                expert_output = resp["hidden_states"].to(self.local_device)
+                current_hidden_states = resp["hidden_states"].to(hidden.device, dtype=hidden.dtype)
             else:
-                # Local expert
-                expert_module = layer.mlp.experts[eid]
-                if expert_module is None:
+                expert_layer = layer.mlp.experts[expert_idx]
+                if expert_layer is None:
                     continue
-                with torch.no_grad():
-                    expert_output = expert_module(expert_input)
+                exp_dev = next(expert_layer.parameters()).device
+                current_hidden_states = expert_layer(current_state.to(exp_dev)).to(hidden.device)
+                
+            current_hidden_states = current_hidden_states * routing_weights[top_x_list, idx_list, None]
+            final_hidden_states.index_add_(0, top_x.to(hidden.device), current_hidden_states)
 
-            expert_output *= routing_weights[topx, eidx, None]
-            final_out.index_add_(0, topx.to(final_out.device), expert_output.squeeze(0))
-
-        hidden = residual + final_out.view(batch_size, seq_len, hidden_dim)
+        final_hidden_states = final_hidden_states.reshape(batch_size, seq_len, hidden_dim)
+        hidden = residual.to(hidden.device) + final_hidden_states
         return hidden
 
     def _sample(self, logits, temperature):
@@ -1824,6 +2173,30 @@ Node Memory Breakdown (Layer Weights + Active KV Cache):
         except Exception as e:
             print(f"  {C.WN} Failed to write audit log: {e}")
 
+        # --- CSV LOGGING ---
+        csv_file = Path("inference_audit.csv")
+        try:
+            import csv
+            file_exists = csv_file.exists()
+            with open(csv_file, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow([
+                        "Timestamp", "Model", "Quantization", "Total Params",
+                        "Input Tokens", "Output Tokens", "TTFT (s)", "Decode Time (s)", "Total Time (s)",
+                        "Prefill TPS", "Decode TPS", "Net Sent (Bytes)", "Net Recv (Bytes)",
+                        "VRAM Delta (Bytes)", "KV Total (Bytes)"
+                    ])
+                writer.writerow([
+                    now_str, self.model_id, quant_mode, total_params,
+                    s["num_input"], s["num_output"], s["ttft"], s["decode_time"], s["total_time"],
+                    prefill_tps, decode_tps, s["net_sent"], s["net_recv"],
+                    max(s["vram_after"] - s["vram_before"], 0), s["kv_total"]
+                ])
+            print(f"  {C.OK} Inference audit stats appended to {C.B}{csv_file}{C.RS}")
+        except Exception as e:
+            print(f"  {C.WN} Failed to write CSV log: {e}")
+
     def cleanup(self):
         """Unload all remote components and close connections."""
         for comp_id, info in self.assignments.items():
@@ -1845,13 +2218,113 @@ class CLI:
         self.model_dir = None
         self.dist_model = DistributedModel()
         self.config_path = Path("dist_config.json")
+        self.assignment_cache_path = Path("assignment_cache.json")
+        self.reverse_listener = ReverseCoordinatorListener(
+            port=DEFAULT_PORT,
+            on_worker_connected=self._on_reverse_worker_connected
+        )
+        self.reverse_listener.start()
+        self.memory_profiling_enabled = False
         self._load_last()
+
+    def _on_reverse_worker_connected(self, nc, info):
+        key = f"{nc.host}:{nc.port}"
+        self.nodes[key] = nc
+        ram_free_gb = info.get("ram_free", 0) / (1024**3)
+        dev = info.get("device", "cpu")
+        print(f"\n  {C.G}⚡ [NEW REVERSE WORKER CONNECTED]{C.RS} {C.B}{nc.label}{C.RS} (RAM Free: {ram_free_gb:.1f} GB, Device: {dev})")
+
+    def _save_assignment_cache(self, preset_name="default"):
+        """Save the current model's distribution assignment topology to cache."""
+        if not self.selected_model or not self.dist_model.assignments:
+            return False
+        model_id = self.selected_model["id"]
+        cache_data = {}
+        if self.assignment_cache_path.exists():
+            try:
+                with open(self.assignment_cache_path) as f:
+                    cache_data = json.load(f)
+            except Exception:
+                cache_data = {}
+
+        exported = self.dist_model.export_assignments()
+        summary = self.dist_model.get_assignment_summary()
+        summary_rows = [f"{k}: {self._compress_comp_list(v)}" for k, v in summary.items()]
+
+        model_entry = cache_data.setdefault(model_id, {})
+        model_entry[preset_name] = {
+            "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "num_layers": self.dist_model.num_layers,
+            "quant": getattr(self.dist_model, "quant", "none"),
+            "assignments": exported,
+            "summary": summary_rows,
+        }
+
+        try:
+            with open(self.assignment_cache_path, "w") as f:
+                json.dump(cache_data, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _get_cached_assignment(self, preset_name="default"):
+        """Retrieve cached assignment dictionary for the currently selected model."""
+        if not self.selected_model or not self.assignment_cache_path.exists():
+            return None
+        model_id = self.selected_model["id"]
+        try:
+            with open(self.assignment_cache_path) as f:
+                cache_data = json.load(f)
+            return cache_data.get(model_id, {}).get(preset_name)
+        except Exception:
+            return None
+
+    def _match_cached_node(self, entry):
+        """Find the matching active NodeConnection for a cached assignment entry."""
+        target_host = entry.get("node_host")
+        target_port = entry.get("node_port")
+        target_hostname = entry.get("node_hostname")
+
+        # 1. Exact host:port match
+        for key, nc in self.nodes.items():
+            if nc.host == target_host and nc.port == target_port:
+                return nc
+
+        # 2. Hostname match (handles IP address changes over DHCP/LAN)
+        for key, nc in self.nodes.items():
+            if target_hostname and target_hostname != "unknown" and getattr(nc, "hostname", "") == target_hostname:
+                return nc
+
+        # 3. Host only match
+        for key, nc in self.nodes.items():
+            if nc.host == target_host:
+                return nc
+
+        # 4. Fallback: if only 1 node connected, match it
+        if len(self.nodes) == 1:
+            return list(self.nodes.values())[0]
+
+        return None
+
+    def _restore_cached_assignment(self, preset_name="default"):
+        """Restore model distribution from cached preset."""
+        cached = self._get_cached_assignment(preset_name)
+        if not cached:
+            return 0
+
+        entries = cached.get("assignments", [])
+        if not entries:
+            return 0
+
+        restored_count = self.dist_model.import_assignments(entries, self._match_cached_node)
+        return restored_count
 
     def _save_config(self):
         try:
             nodes_info = {}
             for key, nc in self.nodes.items():
-                nodes_info[key] = {"host": nc.host, "port": nc.port, "hostname": nc.hostname}
+                if not getattr(nc, "is_reverse", False):
+                    nodes_info[key] = {"host": nc.host, "port": nc.port, "hostname": nc.hostname}
             data = {
                 "model": self.selected_model,
                 "model_dir": str(self.model_dir) if self.model_dir else None,
@@ -1904,6 +2377,7 @@ class CLI:
             elif c == 4: self._distribution_menu()
             elif c == 5: self._inference_menu()
             elif c == 0:
+                self.reverse_listener.stop()
                 self.dist_model.cleanup()
                 print(f"\n  {C.G}Goodbye!{C.RS}\n")
                 sys.exit(0)
@@ -1951,15 +2425,30 @@ class CLI:
     def _node_menu(self):
         while True:
             hdr("REMOTE NODES")
+
+            # Detect Master local LAN IP
+            my_ip = "127.0.0.1"
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(('8.8.8.8', 80))
+                my_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                pass
+
+            print(f"  {C.CY}⚡ Reverse Coordinator:{C.RS} Listening on {C.B}0.0.0.0:{self.reverse_listener.port}{C.RS}")
+            print(f"  {C.D}   (Lab PCs behind UFW can run: ./start_worker.sh --connect {my_ip}:{self.reverse_listener.port}){C.RS}\n")
+
             if self.nodes:
                 rows = []
                 for key, n in self.nodes.items():
                     status = f"{C.G}Connected{C.RS}" if n.is_connected() else f"{C.R}Disconnected{C.RS}"
-                    rows.append([key, n.hostname, status])
-                print(tabulate(rows, headers=["Address", "Hostname", "Status"],
+                    mode = f"{C.CY}Reverse (Outbound){C.RS}" if getattr(n, "is_reverse", False) else "Standard (Inbound)"
+                    rows.append([key, n.hostname, mode, status])
+                print(tabulate(rows, headers=["Address", "Hostname", "Mode", "Status"],
                                tablefmt="rounded_outline"))
             else:
-                print(f"  {C.D}No remote nodes.{C.RS}")
+                print(f"  {C.D}No remote nodes connected yet.{C.RS}")
 
             print(f"""
   {C.B}1.{C.RS} Scan network (UDP discovery)
@@ -2159,12 +2648,19 @@ class CLI:
             summary = dm.get_assignment_summary()
             rows = []
             for node_label, comps in summary.items():
-                # Compress component list for display
                 comp_str = self._compress_comp_list(comps)
                 rows.append([node_label, comp_str])
             print(tabulate(rows, headers=["Node", "Components"],
                            tablefmt="rounded_outline", colalign=("left", "left"),
                            maxcolwidths=[30, 50]))
+
+            # Show cached assignment status if available
+            cached_preset = self._get_cached_assignment()
+            if cached_preset:
+                saved_time = cached_preset.get("saved_at", "")
+                summary_lines = cached_preset.get("summary", [])
+                cached_desc = " | ".join(summary_lines) if summary_lines else "Saved distribution topology"
+                print(f"  {C.CY}💾 Cached Assignment Available ({saved_time}):{C.RS}\n     {C.D}{cached_desc}{C.RS}\n")
 
             el = "Expert" if dm.is_moe else "FFN/MLP"
             if dm.is_moe:
@@ -2178,8 +2674,9 @@ class CLI:
   {C.B}7.{C.RS} Inspect model parameters & layer sizes
   {C.B}8.{C.RS} Clear all assignments
   {C.B}9.{C.RS} {C.G}Apply & Load{C.RS}  (send components to workers)
+  {C.B}L.{C.RS} {C.CY}Restore Cached Assignment{C.RS}
+  {C.B}S.{C.RS} Save Current Assignment as Preset
   {C.B}0.{C.RS} Back""")
-                c = ask("Select [0-9]:", range(0, 10))
             else:
                 print(f"""
   {C.B}1.{C.RS} Assign full layer(s) to remote
@@ -2190,10 +2687,34 @@ class CLI:
   {C.B}6.{C.RS} Inspect model parameters & layer sizes
   {C.B}7.{C.RS} Clear all assignments
   {C.B}8.{C.RS} {C.G}Apply & Load{C.RS}  (send components to workers)
+  {C.B}L.{C.RS} {C.CY}Restore Cached Assignment{C.RS}
+  {C.B}S.{C.RS} Save Current Assignment as Preset
   {C.B}0.{C.RS} Back""")
-                c = ask("Select [0-8]:", range(0, 9))
 
-            if c <= 0: return
+            raw_choice = ask_str("Select option: ").strip().upper()
+            if not raw_choice or raw_choice == "0": return
+
+            if raw_choice == "L":
+                restored = self._restore_cached_assignment()
+                if restored > 0:
+                    print(f"  {C.OK} Restored {restored} component assignments from cache!")
+                else:
+                    print(f"  {C.WN} Could not restore assignments (no matching connected nodes or empty cache).")
+                continue
+
+            if raw_choice == "S":
+                if not dm.assignments:
+                    print(f"  {C.WN} No assignments to save.")
+                else:
+                    self._save_assignment_cache()
+                    print(f"  {C.OK} Current distribution assignment saved to cache preset!")
+                continue
+
+            try:
+                c = int(raw_choice)
+            except ValueError:
+                print(f"  {C.R}Invalid choice.{C.RS}")
+                continue
 
             # Handle non-target commands (Apply, Clear, Inspect)
             apply_opt = 9 if dm.is_moe else 8
@@ -2201,7 +2722,10 @@ class CLI:
             inspect_opt = 7 if dm.is_moe else 6
 
             if c == apply_opt:
-                dm.apply_distribution()
+                success = dm.apply_distribution()
+                if success and dm.assignments:
+                    self._save_assignment_cache()
+                    print(f"  {C.OK} Distribution configuration automatically saved to cache.")
                 input(f"\n  {C.D}Press Enter to continue...{C.RS}")
                 return
 
@@ -2313,12 +2837,18 @@ class CLI:
                 comp_str = self._compress_comp_list(comps)
                 print(f"  {C.CY}{node_label}:{C.RS} {comp_str}")
 
+            prof_str = f"{C.G}Enabled{C.RS}" if self.memory_profiling_enabled else f"{C.D}Disabled{C.RS}"
             print(f"""
   {C.B}1.{C.RS} Send prompt
+  {C.B}2.{C.RS} Toggle Memory Profiling Graph ({prof_str})
   {C.B}0.{C.RS} Back""")
 
-            c = ask("Select [0-1]:", range(0, 2))
+            c = ask("Select [0-2]:", range(0, 3))
             if c <= 0: return
+
+            if c == 2:
+                self.memory_profiling_enabled = not self.memory_profiling_enabled
+                continue
 
             prompt = ask_str(f"\n  {C.B}Enter prompt:{C.RS} ")
             if not prompt: continue
@@ -2331,11 +2861,16 @@ class CLI:
             except: pass
 
             try:
+                if self.memory_profiling_enabled:
+                    dm.start_profiling()
                 dm.generate(prompt, max_tok, temp)
             except Exception as e:
                 print(f"\n  {C.FL} Inference error: {e}")
                 import traceback
                 traceback.print_exc()
+            finally:
+                if self.memory_profiling_enabled:
+                    dm.stop_profiling()
 
             input(f"\n  {C.D}Press Enter to continue...{C.RS}")
 

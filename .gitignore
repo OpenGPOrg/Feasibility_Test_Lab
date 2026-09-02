@@ -4,3 +4,6 @@ __pycache__/
 qwen3-moe-tiny/
 model_cache/*
 !model_cache/.gitkeep
+worker_deploy/build/
+worker_deploy/dist/
+*.zip
