@@ -13,6 +13,7 @@ Requirements (same versions as controller):
 import argparse
 import gc
 import io
+import json
 import pickle
 import platform
 import socket
@@ -175,11 +176,108 @@ def _match_tuple_dtype(tup, module):
     return tup
 
 
+def _move_module_to_device(module, device):
+    """Move module to device and ensure bitsandbytes quant_state tensors are also moved to the device."""
+    if module is None or device is None:
+        return module
+    if hasattr(module, "to"):
+        module = module.to(device)
+    for p in module.parameters():
+        if hasattr(p, "quant_state") and p.quant_state is not None:
+            try:
+                p.quant_state.to(device)
+            except Exception:
+                pass
+    return module
+
+
+
+def _patch_transformers_qwen3_5():
+    """Auto-patch Qwen3.5 linear attention to be robust across all transformers versions (5.5.x through 5.16+)."""
+    try:
+        from transformers.cache_utils import DynamicCache, LinearAttentionLayer
+        if not getattr(DynamicCache, "_opengp_patched", False):
+            orig_has_prev = getattr(DynamicCache, "has_previous_state", None)
+            if orig_has_prev is not None:
+                def patched_has_prev(self, layer_idx=None):
+                    res = orig_has_prev(self, layer_idx=layer_idx)
+                    if isinstance(res, dict):
+                        return res.get(0, False)
+                    return bool(res)
+                DynamicCache.has_previous_state = patched_has_prev
+            DynamicCache._opengp_patched = True
+
+        if not getattr(LinearAttentionLayer, "_opengp_patched", False):
+            orig_urs = getattr(LinearAttentionLayer, "update_recurrent_state", None)
+            if orig_urs is not None:
+                def safe_update_recurrent_state(self, recurrent_states, state_idx=0, **kwargs):
+                    if hasattr(self, 'is_recurrent_states_initialized'):
+                        is_init = self.is_recurrent_states_initialized.get(state_idx, False) if isinstance(self.is_recurrent_states_initialized, dict) else self.is_recurrent_states_initialized
+                        if not is_init:
+                            self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
+                    target = self.recurrent_states[state_idx] if isinstance(self.recurrent_states, dict) else self.recurrent_states
+                    if target is not None and hasattr(target, 'shape') and target.shape != recurrent_states.shape:
+                        if recurrent_states.ndim == target.ndim + 1 and recurrent_states.shape[0] == 1:
+                            target.copy_(recurrent_states.squeeze(0))
+                        elif recurrent_states.ndim + 1 == target.ndim and target.shape[0] == 1:
+                            target.squeeze(0).copy_(recurrent_states)
+                        else:
+                            target.copy_(recurrent_states)
+                    elif target is not None:
+                        target.copy_(recurrent_states)
+                    return target
+                LinearAttentionLayer.update_recurrent_state = safe_update_recurrent_state
+
+            orig_ucs = getattr(LinearAttentionLayer, "update_conv_state", None)
+            if orig_ucs is not None:
+                def safe_update_conv_state(self, conv_states, state_idx=0, **kwargs):
+                    if hasattr(self, 'is_conv_states_initialized'):
+                        is_init = self.is_conv_states_initialized.get(state_idx, False) if isinstance(self.is_conv_states_initialized, dict) else self.is_conv_states_initialized
+                        if not is_init:
+                            self.lazy_initialization(conv_states=conv_states, state_idx=state_idx, **kwargs)
+                    return orig_ucs(self, conv_states, state_idx=state_idx, **kwargs)
+                LinearAttentionLayer.update_conv_state = safe_update_conv_state
+
+            LinearAttentionLayer._opengp_patched = True
+
+        from transformers.models.qwen3_5 import modeling_qwen3_5
+        if hasattr(modeling_qwen3_5, "Qwen3_5GatedDeltaNet"):
+            target_cls = modeling_qwen3_5.Qwen3_5GatedDeltaNet
+            if not getattr(target_cls, "_opengp_patched_v2", False):
+                orig_fwd = getattr(target_cls, "_orig_fwd", target_cls.forward)
+                target_cls._orig_fwd = orig_fwd
+                def patched_fwd(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                    if not getattr(self, "_opengp_wrapped", False):
+                        orig_conv_up = self.causal_conv1d_update
+                        def safe_conv_up(mixed_qkv, conv_state, *c_args, **c_kwargs):
+                            if isinstance(conv_state, dict) and 0 in conv_state:
+                                conv_state = conv_state[0]
+                            return orig_conv_up(mixed_qkv, conv_state, *c_args, **c_kwargs)
+                        self.causal_conv1d_update = safe_conv_up
+
+                        orig_rec_rule = self.recurrent_gated_delta_rule
+                        def safe_rec_rule(*r_args, **r_kwargs):
+                            if "initial_state" in r_kwargs and isinstance(r_kwargs["initial_state"], dict):
+                                r_kwargs["initial_state"] = r_kwargs["initial_state"].get(0, None)
+                            return orig_rec_rule(*r_args, **r_kwargs)
+                        self.recurrent_gated_delta_rule = safe_rec_rule
+                        self._opengp_wrapped = True
+
+                    return orig_fwd(self, hidden_states, cache_params=cache_params, attention_mask=attention_mask, **kwargs)
+                target_cls.forward = patched_fwd
+                target_cls._opengp_patched_v2 = True
+    except Exception:
+        pass
+
+_patch_transformers_qwen3_5()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Worker
 # ═══════════════════════════════════════════════════════════════════════════════
 class Worker:
     def __init__(self, port=DEFAULT_PORT, device="auto", connect_target=None):
+        _patch_transformers_qwen3_5()
         self.port = port
         self.connect_target = connect_target
         self.hostname = platform.node()
@@ -192,8 +290,9 @@ class Worker:
         self.stats = {"bytes_sent": 0, "bytes_received": 0, "forward_calls": 0}
         self.broadcast_addr = "255.255.255.255"  # works on any network
         self.peer_sockets = {}  # "host:port" -> socket for direct peer-to-peer ring pipeline
+
         self.loaded_model_id = None
-        
+
         self.profiler_running = False
         self.profiler_thread = None
         self.memory_log = []
@@ -233,8 +332,14 @@ class Worker:
         """Save a component to disk cache scoped by model_id."""
         try:
             path = self._cache_path(comp_id, model_id or "default")
+            is_cuda = any(p.is_cuda for p in module.parameters())
+            if is_cuda:
+                import copy
+                save_mod = copy.deepcopy(module).cpu()
+            else:
+                save_mod = module
             torch.save({
-                "module": module.cpu(),
+                "module": save_mod,
                 "comp_id": comp_id,
                 "model_id": model_id or "default",
                 "comp_type": self.comp_types.get(comp_id, "unknown"),
@@ -242,17 +347,38 @@ class Worker:
         except Exception as e:
             print(f"  ⚠ Cache save failed for {comp_id}: {e}")
 
-    def _load_cached_for_model(self, model_id):
-        """Load cached components for a specific model from disk."""
+    def _load_cached_for_model(self, model_id, target_components=None):
+        """Load cached components for a specific model from disk into VRAM."""
         if not self.cache_dir.exists():
             return
         safe_model = (model_id or "default").replace("/", "_").replace("\\", "_")
         prefix = f"{safe_model}_"
         loaded_count = 0
-        for path in self.cache_dir.glob(f"{prefix}*.pt"):
+
+        # If specific target components are specified, only load those to prevent VRAM overflow
+        if target_components is not None:
+            paths_to_check = []
+            for cid in target_components:
+                if cid in self.components:
+                    continue
+                safe_comp = cid.replace("/", "_").replace("\\", "_")
+                p = self.cache_dir / f"{prefix}{safe_comp}.pt"
+                if p.exists():
+                    paths_to_check.append((p, cid))
+        else:
+            paths_to_check = []
+            for path in sorted(self.cache_dir.glob(f"{prefix}*.pt")):
+                comp_id_from_stem = path.stem[len(prefix):]
+                if comp_id_from_stem not in self.components:
+                    paths_to_check.append((path, comp_id_from_stem))
+
+        for path, comp_id_from_stem in paths_to_check:
             try:
                 data = torch.load(path, map_location="cpu", weights_only=False)
-                comp_id = data["comp_id"]
+                comp_id = data.get("comp_id", comp_id_from_stem)
+                if comp_id in self.components:
+                    continue
+
                 module = data["module"]
                 comp_type = data.get("comp_type", "unknown")
                 if hasattr(module, "to"):
@@ -298,60 +424,7 @@ class Worker:
             # Start UDP discovery broadcast
             t = threading.Thread(target=self._discovery_loop, daemon=True)
             t.start()
-            print(f"  ✓ Discovery broadcast on UDP port {DISC_PORT}")
-
-            # Start TCP server
             self._serve()
-
-    def _connect_to_master(self, master_host, master_port):
-        """Reverse connection mode — connects outbound to master coordinator to bypass firewalls/UFW."""
-        print(f"  ⚡ Reverse Connection Mode Active")
-        print(f"  Dialing outbound to Master: {master_host}:{master_port} (Bypassing UFW/NAT)...")
-
-        while self.running:
-            sock = None
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                sock.settimeout(5.0)
-                sock.connect((master_host, master_port))
-                sock.settimeout(None)
-                print(f"  ✓ Connected outbound to Master at {master_host}:{master_port}!")
-
-                # Send initial registration handshake
-                handshake = {
-                    "cmd": "register_reverse_worker",
-                    "hostname": self.hostname,
-                    "device": str(self.device),
-                    "ram_total": psutil.virtual_memory().total,
-                    "ram_free": psutil.virtual_memory().available,
-                    "cpu": platform.processor() or "Unknown",
-                    "cores": psutil.cpu_count(logical=True),
-                    "gpu": _get_gpu_info(),
-                }
-                send_msg(sock, handshake)
-                resp, _ = recv_msg(sock)
-                if resp.get("status") != "ok":
-                    print(f"  ✗ Master handshake rejected: {resp.get('msg')}")
-                    sock.close()
-                    time.sleep(3)
-                    continue
-
-                print(f"  ✓ Handshake accepted by Master. Ready for inference!\n")
-                self._handle(sock, (master_host, master_port))
-            except (ConnectionRefusedError, socket.timeout, OSError) as e:
-                if sock:
-                    try: sock.close()
-                    except: pass
-                print(f"  ⏳ Waiting for Master at {master_host}:{master_port}... ({e})")
-                time.sleep(3)
-            except Exception as e:
-                if sock:
-                    try: sock.close()
-                    except: pass
-                print(f"  ✗ Connection error: {e}")
-                time.sleep(3)
 
     def _discovery_loop(self):
         """Broadcast presence via UDP every 3 seconds."""
@@ -376,13 +449,42 @@ class Worker:
                 pass
             time.sleep(3)
 
+    def _connect_to_master(self, host, port):
+        """Reverse connection: connect to Master's ReverseCoordinatorListener."""
+        print(f"  Initiating reverse connection to Master at {host}:{port}...")
+        while self.running:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                sock.connect((host, port))
+                print(f"  ✓ Connected to Master at {host}:{port}!")
+
+                # Handshake
+                handshake = {
+                    "type": "openGP_worker_register",
+                    "hostname": self.hostname,
+                    "device": str(self.device),
+                    "cores": psutil.cpu_count(logical=True),
+                    "ram_gb": round(psutil.virtual_memory().total / (1024**3), 1),
+                    "gpu": _get_gpu_info() or "None",
+                    "components": list(self.components.keys()),
+                }
+                send_msg(sock, handshake)
+
+                self._handle(sock, (host, port))
+            except Exception as e:
+                print(f"  ✗ Connection to Master failed: {e}. Retrying in 3s...")
+                time.sleep(3)
+
+    # ── TCP Server (Inbound Mode) ─────────────────────────────────────────
     def _serve(self):
         """TCP server — handles one client at a time for simplicity."""
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         srv.bind(("0.0.0.0", self.port))
-        srv.listen(5)  # allow more pending connections for VPN peers
+        srv.listen(5)
         print(f"  ✓ Listening on TCP port {self.port}")
         print(f"  Waiting for controller connection...\n")
 
@@ -425,6 +527,7 @@ class Worker:
                 "check_components":  self._cmd_check_components,
                 "load":              self._cmd_load,
                 "load_cached":       self._cmd_load_cached,
+                "load_disk_component": self._cmd_load_disk_component,
                 "unload":            self._cmd_unload,
                 "clear_kv":          self._cmd_clear_kv,
                 "get_memory":        self._cmd_get_memory,
@@ -447,78 +550,79 @@ class Worker:
 
     # ── Commands ──────────────────────────────────────────────────────────
     def _cmd_start_profiling(self, msg):
+        """Start recording VRAM and RAM at high frequency."""
+        if self.profiler_running:
+            return {"status": "ok", "msg": "Profiler already running"}
         self.profiler_running = True
         self.memory_log = []
-        def _profiler():
-            import os
-            proc = psutil.Process(os.getpid())
-            start_time = time.time()
-            while self.profiler_running:
-                rss = proc.memory_info().rss / (1024**2)
-                vram = 0
-                if torch.cuda.is_available():
-                    vram = torch.cuda.memory_allocated() / (1024**2)
-                elif hasattr(torch, "mps") and hasattr(torch.mps, "current_allocated_memory"):
-                    try: vram = torch.mps.current_allocated_memory() / (1024**2)
-                    except: pass
-                self.memory_log.append((time.time() - start_time, rss, vram))
-                time.sleep(0.1)
-        self.profiler_thread = threading.Thread(target=_profiler, daemon=True)
+        self.profiler_start_time = time.time()
+        self.profiler_thread = threading.Thread(target=self._profiler_loop, daemon=True)
         self.profiler_thread.start()
+        print(f"  📊 Background memory profiler started on {self.hostname}")
         return {"status": "ok"}
 
     def _cmd_stop_profiling(self, msg):
+        """Stop profiling, generate plot, and return saved path."""
+        if not self.profiler_running:
+            return {"status": "ok", "msg": "Profiler was not running"}
         self.profiler_running = False
         if self.profiler_thread:
-            self.profiler_thread.join(timeout=1.0)
-            self.profiler_thread = None
-        
-        saved_path = ""
+            self.profiler_thread.join(timeout=2.0)
+        saved_path = self._plot_memory_profile()
+        return {"status": "ok", "saved_path": saved_path}
+
+    def _profiler_loop(self):
+        proc = psutil.Process(os.getpid())
+        while self.profiler_running:
+            now = time.time() - self.profiler_start_time
+            vram_mb = 0.0
+            if torch.cuda.is_available():
+                vram_mb = torch.cuda.memory_allocated() / (1024**2)
+            ram_mb = proc.memory_info().rss / (1024**2)
+            self.memory_log.append((now, vram_mb, ram_mb))
+            time.sleep(0.01)
+
+    def _plot_memory_profile(self):
+        if not self.memory_log:
+            return None
         try:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-            
+            ts, vram, ram = zip(*self.memory_log)
             plt.figure(figsize=(10, 5))
-            times = [x[0] for x in self.memory_log]
-            rss = [x[1] for x in self.memory_log]
-            vram = [x[2] for x in self.memory_log]
-            
-            plt.plot(times, rss, label="RAM (RSS) MB", color='blue')
-            if any(v > 0 for v in vram):
-                plt.plot(times, vram, label="VRAM Allocated MB", color='green')
-            
-            plt.title(f"Worker Memory Consumption - {self.hostname}")
-            plt.xlabel("Time (s)")
+            if torch.cuda.is_available():
+                plt.plot(ts, vram, label="GPU VRAM Allocated (MB)", color="red", linewidth=1.5)
+            plt.plot(ts, ram, label="CPU RAM (RSS) (MB)", color="blue", linewidth=1.5)
+            plt.title(f"Worker Memory Footprint During Inference ({self.hostname})")
+            plt.xlabel("Time (seconds)")
             plt.ylabel("Memory (MB)")
+            plt.grid(True, linestyle="--", alpha=0.6)
             plt.legend()
-            plt.grid(True)
-            
-            out_name = f"worker_memory_profile_{int(time.time())}.png"
-            out_path = Path.cwd() / out_name
-            plt.savefig(out_path)
+            plt.tight_layout()
+            out_file = f"worker_memory_profile_{int(time.time())}.png"
+            plt.savefig(out_file)
             plt.close()
-            saved_path = str(out_path.absolute())
-            print(f"  📊 Memory profile saved to {out_path}")
+            return out_file
         except Exception as e:
-            print(f"  ⚠ Failed to plot memory profile: {e}")
-            
-        return {"status": "ok", "saved_path": saved_path}
+            print(f"  ⚠ Failed to plot worker profile: {e}")
+            return None
 
     def _cmd_ping(self, msg):
-        return {"status": "ok", "hostname": self.hostname}
+        return {"status": "pong", "hostname": self.hostname}
 
     def _cmd_info(self, msg):
+        gpu = _get_gpu_info()
         return {
             "status": "ok",
             "hostname": self.hostname,
-            "ram_total": psutil.virtual_memory().total,
-            "ram_free": psutil.virtual_memory().available,
+            "device": str(self.device),
             "cpu": platform.processor() or "Unknown",
             "cores": psutil.cpu_count(logical=True),
-            "device": str(self.device),
-            "gpu": _get_gpu_info(),
-            "components": list(self.components.keys()),
+            "ram_total": psutil.virtual_memory().total,
+            "ram_avail": psutil.virtual_memory().available,
+            "gpu": gpu,
+            "torch_version": torch.__version__,
         }
 
     def _cmd_status(self, msg):
@@ -553,13 +657,15 @@ class Worker:
             gc.collect()
 
         self.loaded_model_id = model_id
+        # Save to disk while on CPU before moving to GPU
+        self._save_component(comp_id, module, model_id)
+
         module = module.to(self.device).eval()
         self.components[comp_id] = module
         self.comp_types[comp_id] = comp_type
         self.kv_caches[comp_id] = None
 
         size = sum(p.numel() * p.element_size() for p in module.parameters())
-        self._save_component(comp_id, module, model_id)
         print(f"  ✓ Loaded on {self.device}: {comp_id} [{model_id}] ({comp_type}, {type(module).__name__}, "
               f"{size / 1024**2:.1f} MB)")
         return {"status": "ok", "size_bytes": size}
@@ -620,6 +726,7 @@ class Worker:
     def _cmd_check_components(self, msg):
         """Report components loaded in memory for the requested model_id."""
         req_model = msg.get("model_id")
+        required_comps = msg.get("required_components")
 
         # If model is different, clear currently loaded memory components
         if req_model and self.loaded_model_id and self.loaded_model_id != req_model:
@@ -627,19 +734,73 @@ class Worker:
             self.comp_types.clear()
             self.kv_caches.clear()
             self.loaded_model_id = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             gc.collect()
 
-        # If memory is empty, try loading cached components for this model from disk
-        if req_model and not self.components:
-            self._load_cached_for_model(req_model)
+        # If required_components is specified, evict unassigned components from VRAM to prevent OOM
+        if required_comps is not None:
+            req_set = set(required_comps)
+            to_evict = [cid for cid in list(self.components.keys()) if cid not in req_set]
+            if to_evict:
+                for cid in to_evict:
+                    del self.components[cid]
+                    self.comp_types.pop(cid, None)
+                    self.kv_caches.pop(cid, None)
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
+                print(f"  ✓ Evicted {len(to_evict)} unassigned component(s) from VRAM to prevent OOM")
+
+            # Load only the missing required components from disk cache
+            self._load_cached_for_model(req_model, target_components=req_set)
+
+        # Collect list of available disk cached component IDs for this model
+        disk_cached = []
+        if req_model and self.cache_dir.exists():
+            safe_model = (req_model or "default").replace("/", "_").replace("\\", "_")
+            prefix = f"{safe_model}_"
+            for p in self.cache_dir.glob(f"{prefix}*.pt"):
+                disk_cached.append(p.stem[len(prefix):])
 
         loaded = list(self.components.keys()) if (not req_model or self.loaded_model_id == req_model) else []
         return {
             "status": "ok",
             "model_id": self.loaded_model_id,
             "loaded": loaded,
+            "disk_cached": disk_cached,
             "hostname": self.hostname,
         }
+
+    def _cmd_load_disk_component(self, msg):
+        """Load a single component from disk cache into VRAM on demand."""
+        comp_id = msg.get("component_id")
+        model_id = msg.get("model_id", self.loaded_model_id or "default")
+        if not comp_id or not self.cache_dir.exists():
+            return {"status": "error", "msg": "Missing component_id or cache_dir"}
+
+        safe_model = (model_id or "default").replace("/", "_").replace("\\", "_")
+        safe_comp = comp_id.replace("/", "_").replace("\\", "_")
+        path = self.cache_dir / f"{safe_model}_{safe_comp}.pt"
+        if not path.exists():
+            return {"status": "error", "msg": f"Not found on disk: {path.name}"}
+
+        try:
+            data = torch.load(path, map_location="cpu", weights_only=False)
+            module = data["module"]
+            comp_type = data.get("comp_type", "unknown")
+            if hasattr(module, "to"):
+                module = _move_module_to_device(module, self.device).eval()
+            self.components[comp_id] = module
+            self.comp_types[comp_id] = comp_type
+            if comp_type in ("layer", "attention"):
+                self.kv_caches[comp_id] = None
+            self.loaded_model_id = model_id
+            size = sum(p.numel() * p.element_size() for p in module.parameters())
+            print(f"  ✓ Loaded from disk onto {self.device}: {comp_id} ({size / 1024**2:.1f} MB)")
+            return {"status": "ok", "size_bytes": size, "from_cache": True}
+        except Exception as e:
+            return {"status": "error", "msg": str(e)}
 
     def _cmd_load_cached(self, msg):
         """Load a component from disk cache into memory using provided module as template."""
@@ -653,7 +814,7 @@ class Worker:
             try:
                 cached_data = torch.load(cache_path, map_location="cpu", weights_only=True)
                 module.load_state_dict(cached_data["state_dict"])
-                module = module.to(self.device).eval()
+                module = _move_module_to_device(module, self.device).eval()
                 self.components[comp_id] = module
                 self.comp_types[comp_id] = comp_type
                 self.kv_caches[comp_id] = None
@@ -672,22 +833,49 @@ class Worker:
         cache = self.kv_caches.get(comp_id)
         if cache is None:
             from transformers import DynamicCache
-            cache = DynamicCache()
+            module = self.components.get(comp_id)
+            cfg = getattr(module, 'config', getattr(getattr(module, 'mlp', None), 'config', getattr(getattr(module, 'self_attn', None), 'config', getattr(getattr(module, 'linear_attn', None), 'config', None)))) if module is not None else None
+            if cfg is None:
+                for m in self.components.values():
+                    c = getattr(m, 'config', getattr(getattr(m, 'mlp', None), 'config', None))
+                    if c is not None:
+                        cfg = c
+                        break
+            text_cfg = getattr(cfg, 'text_config', cfg) if cfg is not None else None
+            try:
+                cache = DynamicCache(config=text_cfg) if text_cfg is not None else DynamicCache()
+            except Exception:
+                cache = DynamicCache()
             self.kv_caches[comp_id] = cache
         return cache
 
     def _run_module_safe(self, module, hs, pos_emb, kwargs):
         """Execute a module with multi-stage signature handling and automatic dtype mismatch recovery."""
         # Ensure module and inputs are strictly on the active worker device (CUDA, Apple Silicon MPS, or CPU)
-        module = module.to(self.device)
+        module = _move_module_to_device(module, self.device)
         hs = hs.to(self.device)
         if pos_emb is not None:
             pos_emb = tuple(p.to(self.device) if isinstance(p, torch.Tensor) else p for p in pos_emb)
-        if kwargs.get("position_ids") is not None and isinstance(kwargs["position_ids"], torch.Tensor):
-            kwargs["position_ids"] = kwargs["position_ids"].to(self.device)
+
+        clean_kwargs = {}
+        for kw, val in kwargs.items():
+            if kw == "position_embeddings" and pos_emb is not None:
+                clean_kwargs[kw] = pos_emb
+            elif isinstance(val, torch.Tensor):
+                clean_kwargs[kw] = val.to(self.device)
+            elif isinstance(val, tuple):
+                clean_kwargs[kw] = tuple(v.to(self.device) if isinstance(v, torch.Tensor) else v for v in val)
+            elif isinstance(val, list):
+                clean_kwargs[kw] = [v.to(self.device) if isinstance(v, torch.Tensor) else v for v in val]
+            else:
+                clean_kwargs[kw] = val
+        if pos_emb is not None and "position_embeddings" not in clean_kwargs:
+            clean_kwargs["position_embeddings"] = pos_emb
 
         def _try_call(curr_hs, curr_pos_emb, curr_kwargs):
             k = dict(curr_kwargs)
+            if curr_pos_emb is not None:
+                k["position_embeddings"] = curr_pos_emb
             # Strategy 1: Standard full keyword args
             try:
                 return module(curr_hs, **k)
@@ -748,7 +936,7 @@ class Worker:
             return module(curr_hs)
 
         try:
-            return _try_call(hs, pos_emb, kwargs)
+            return _try_call(hs, pos_emb, clean_kwargs)
         except RuntimeError as e:
             err_msg = str(e).lower()
             if any(k in err_msg for k in ("dtype", "mat1", "m1 and m2", "same type", "half", "bfloat16", "float")):
@@ -758,7 +946,7 @@ class Worker:
                     try:
                         fallback_hs = hs.to(dt)
                         fallback_pos_emb = tuple(p.to(dt) if isinstance(p, torch.Tensor) else p for p in pos_emb) if pos_emb is not None else None
-                        return _try_call(fallback_hs, fallback_pos_emb, kwargs)
+                        return _try_call(fallback_hs, fallback_pos_emb, clean_kwargs)
                     except Exception:
                         continue
             raise
@@ -768,6 +956,16 @@ class Worker:
         module = self.components.get(comp_id)
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
+
+        if comp_id.startswith("layer_"):
+            try:
+                lidx = int(comp_id.split("_")[1])
+                if hasattr(module, "self_attn") and hasattr(module.self_attn, "layer_idx"):
+                    module.self_attn.layer_idx = lidx
+                if hasattr(module, "linear_attn") and hasattr(module.linear_attn, "layer_idx"):
+                    module.linear_attn.layer_idx = lidx
+            except Exception:
+                pass
 
         hs = _match_dtype(msg["hidden_states"], module)
         pos_ids = msg.get("position_ids")
@@ -781,6 +979,8 @@ class Worker:
             outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
 
         hidden_out = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+        if hidden_out.ndim == 2:
+            hidden_out = hidden_out.unsqueeze(0)
         # Update cache reference (DynamicCache is mutated in-place, but just in case)
         if not isinstance(outputs, torch.Tensor) and len(outputs) > 1 and outputs[1] is not None:
             self.kv_caches[comp_id] = outputs[1]
@@ -809,6 +1009,16 @@ class Worker:
                 if module is None:
                     return {"status": "error", "msg": f"Layer not found on worker: {comp_id}"}
 
+                if comp_id.startswith("layer_"):
+                    try:
+                        lidx = int(comp_id.split("_")[1])
+                        if hasattr(module, "self_attn") and hasattr(module.self_attn, "layer_idx"):
+                            module.self_attn.layer_idx = lidx
+                        if hasattr(module, "linear_attn") and hasattr(module.linear_attn, "layer_idx"):
+                            module.linear_attn.layer_idx = lidx
+                    except Exception:
+                        pass
+
                 hs = _match_dtype(hs, module)
                 pos_emb = _match_tuple_dtype(raw_pos_emb, module)
                 cache = self._get_cache(comp_id)
@@ -819,6 +1029,8 @@ class Worker:
 
                 outputs = self._run_module_safe(module, hs, pos_emb, kwargs)
                 hs = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+                if hs.ndim == 2:
+                    hs = hs.unsqueeze(0)
 
                 if not isinstance(outputs, torch.Tensor) and len(outputs) > 1 and outputs[1] is not None:
                     self.kv_caches[comp_id] = outputs[1]
@@ -931,6 +1143,9 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
+        module = _move_module_to_device(module, self.device)
+        self.components[comp_id] = module
+
         hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
             out = module(hs.to(self.device))
@@ -946,6 +1161,9 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
+        module = _move_module_to_device(module, self.device)
+        self.components[comp_id] = module
+
         hs = _match_dtype(msg["hidden_states"], module)
         with torch.no_grad():
             out = module(hs.to(self.device))
@@ -958,6 +1176,9 @@ class Worker:
         module = self.components.get(comp_id)
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
+
+        module = _move_module_to_device(module, self.device)
+        self.components[comp_id] = module
 
         input_ids = msg["input_ids"]
         with torch.no_grad():
@@ -972,7 +1193,12 @@ class Worker:
         if module is None:
             return {"status": "error", "msg": f"Not found: {comp_id}"}
 
+        module = _move_module_to_device(module, self.device)
+        self.components[comp_id] = module
+
         hs = _match_dtype(msg["hidden_states"], module)
+        if isinstance(hs, torch.Tensor) and hs.ndim == 3 and hs.shape[1] > 1:
+            hs = hs[:, -1:, :]
         with torch.no_grad():
             logits = module(hs.to(self.device))
 

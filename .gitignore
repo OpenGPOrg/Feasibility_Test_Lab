@@ -7,3 +7,22 @@ model_cache/*
 worker_deploy/build/
 worker_deploy/dist/
 *.zip
+
+# Archives & Bundles
+*.tar.gz
+*.tar
+
+# Model weights
+qwen27B_4/
+
+# Logs, Caches & Experiment Data
+*.log
+*.csv
+experiment_profiles/
+hops_experiment_profiles/
+multi_hop_experiment_results/
+final/
+
+# IDE & Build
+.vscode/
+build/

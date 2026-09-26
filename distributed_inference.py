@@ -43,7 +43,8 @@ MAGIC = b"LDIST_V1"
 RECV_BUF = 1 << 16
 CACHE_DIR = Path("/media/vithurshan/vithu/llm/openGP/LoadTime/model_cache")
 DOWNLOAD_PATTERNS = ["*.safetensors", "*.json", "*.model", "*.tiktoken",
-                     "*.txt", "tokenizer*"]
+                     "*.txt", "tokenizer*", "*.jinja"]
+
 
 class C:
     B = "\033[1m"; D = "\033[2m"; G = "\033[92m"; Y = "\033[93m"; R = "\033[91m"
@@ -61,9 +62,17 @@ MODELS = [
     {"id": "microsoft/phi-2", "name": "Phi-2 2.7B", "type": "Dense", "gb": 5.56},
     {"id": "Qwen/Qwen2.5-3B", "name": "Qwen2.5 3B", "type": "Dense", "gb": 6.39},
     {"id": "allenai/OLMoE-1B-7B-0924", "name": "OLMoE 1B/7B", "type": "MoE", "gb": 12.89},
-    {"id": "Qwen/Qwen2.5-7B", "name": "Qwen2.5 7B", "type": "Dense", "gb": 15.23},
+    {"id": "Qwen/Qwen2.5-7B-Instruct", "name": "Qwen2.5 7B Instruct", "type": "Dense", "gb": 15.23},
+    {"id": "Qwen/Qwen2.5-7B", "name": "Qwen2.5 7B (Base)", "type": "Dense", "gb": 15.23},
     {"id": "meta-llama/Llama-3.1-8B", "name": "Llama 3.1 8B", "type": "Dense", "gb": 16.07, "gated": True},
+    # ── Large models (>8B) — 4-bit NF4 required, ~16 GB combined VRAM ──
+    {"id": "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen27B_4", "name": "Qwen3.8 27B Local (4-bit)", "type": "Dense/Hybrid", "gb": 16.6,
+     "force_quant": "4bit",
+     "note": "Local pre-quantized 4-bit NF4 (qwen27B_4). 64-layer hybrid. Needs 5.6 GB Master + 15 GB Worker."},
 ]
+
+
+
 
 
 def fmt_bytes(n):
@@ -81,6 +90,101 @@ def fmt_params(n):
     if n >= 1e9: return f"{n/1e9:.2f} B"
     if n >= 1e3: return f"{n/1e3:.2f} K"
     return str(n)
+
+
+def _patch_transformers_qwen3_5():
+    """Auto-patch Qwen3.5 linear attention to be robust across all transformers versions (5.5.x through 5.16+)."""
+    try:
+        from transformers.cache_utils import DynamicCache, LinearAttentionLayer
+        if not getattr(DynamicCache, "_opengp_patched", False):
+            orig_has_prev = getattr(DynamicCache, "has_previous_state", None)
+            if orig_has_prev is not None:
+                def patched_has_prev(self, layer_idx=None):
+                    res = orig_has_prev(self, layer_idx=layer_idx)
+                    if isinstance(res, dict):
+                        return res.get(0, False)
+                    return bool(res)
+                DynamicCache.has_previous_state = patched_has_prev
+            DynamicCache._opengp_patched = True
+
+        if not getattr(LinearAttentionLayer, "_opengp_patched", False):
+            orig_urs = getattr(LinearAttentionLayer, "update_recurrent_state", None)
+            if orig_urs is not None:
+                def safe_update_recurrent_state(self, recurrent_states, state_idx=0, **kwargs):
+                    if hasattr(self, 'is_recurrent_states_initialized'):
+                        is_init = self.is_recurrent_states_initialized.get(state_idx, False) if isinstance(self.is_recurrent_states_initialized, dict) else self.is_recurrent_states_initialized
+                        if not is_init:
+                            self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
+                    target = self.recurrent_states[state_idx] if isinstance(self.recurrent_states, dict) else self.recurrent_states
+                    if target is not None and hasattr(target, 'shape') and target.shape != recurrent_states.shape:
+                        if recurrent_states.ndim == target.ndim + 1 and recurrent_states.shape[0] == 1:
+                            target.copy_(recurrent_states.squeeze(0))
+                        elif recurrent_states.ndim + 1 == target.ndim and target.shape[0] == 1:
+                            target.squeeze(0).copy_(recurrent_states)
+                        else:
+                            target.copy_(recurrent_states)
+                    elif target is not None:
+                        target.copy_(recurrent_states)
+                    return target
+                LinearAttentionLayer.update_recurrent_state = safe_update_recurrent_state
+
+            orig_ucs = getattr(LinearAttentionLayer, "update_conv_state", None)
+            if orig_ucs is not None:
+                def safe_update_conv_state(self, conv_states, state_idx=0, **kwargs):
+                    if hasattr(self, 'is_conv_states_initialized'):
+                        is_init = self.is_conv_states_initialized.get(state_idx, False) if isinstance(self.is_conv_states_initialized, dict) else self.is_conv_states_initialized
+                        if not is_init:
+                            self.lazy_initialization(conv_states=conv_states, state_idx=state_idx, **kwargs)
+                    return orig_ucs(self, conv_states, state_idx=state_idx, **kwargs)
+                LinearAttentionLayer.update_conv_state = safe_update_conv_state
+
+            LinearAttentionLayer._opengp_patched = True
+
+        from transformers.models.qwen3_5 import modeling_qwen3_5
+        if hasattr(modeling_qwen3_5, "Qwen3_5GatedDeltaNet"):
+            target_cls = modeling_qwen3_5.Qwen3_5GatedDeltaNet
+            if not getattr(target_cls, "_opengp_patched_v2", False):
+                orig_fwd = getattr(target_cls, "_orig_fwd", target_cls.forward)
+                target_cls._orig_fwd = orig_fwd
+                def patched_fwd(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                    if not getattr(self, "_opengp_wrapped", False):
+                        orig_conv_up = self.causal_conv1d_update
+                        def safe_conv_up(mixed_qkv, conv_state, *c_args, **c_kwargs):
+                            if isinstance(conv_state, dict) and 0 in conv_state:
+                                conv_state = conv_state[0]
+                            return orig_conv_up(mixed_qkv, conv_state, *c_args, **c_kwargs)
+                        self.causal_conv1d_update = safe_conv_up
+
+                        orig_rec_rule = self.recurrent_gated_delta_rule
+                        def safe_rec_rule(*r_args, **r_kwargs):
+                            if "initial_state" in r_kwargs and isinstance(r_kwargs["initial_state"], dict):
+                                r_kwargs["initial_state"] = r_kwargs["initial_state"].get(0, None)
+                            return orig_rec_rule(*r_args, **r_kwargs)
+                        self.recurrent_gated_delta_rule = safe_rec_rule
+                        self._opengp_wrapped = True
+
+                    return orig_fwd(self, hidden_states, cache_params=cache_params, attention_mask=attention_mask, **kwargs)
+                target_cls.forward = patched_fwd
+                target_cls._opengp_patched_v2 = True
+    except Exception:
+        pass
+
+_patch_transformers_qwen3_5()
+
+
+def _move_module_to_device(module, device):
+    """Move module to device and ensure bitsandbytes quant_state tensors are also moved to the device."""
+    if module is None or device is None:
+        return module
+    if hasattr(module, "to"):
+        module = module.to(device)
+    for p in module.parameters():
+        if hasattr(p, "quant_state") and p.quant_state is not None:
+            try:
+                p.quant_state.to(device)
+            except Exception:
+                pass
+    return module
 
 
 class AttentionRemoteAdapter(torch.nn.Module):
@@ -345,36 +449,58 @@ class NodeConnection:
         self.close()  # close any stale socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        # TCP keepalive for VPN connections that may drop
+        # TCP keepalive for network flaps / Wi-Fi reconnections
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        self.sock.settimeout(timeout if timeout is not None else 300)
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            try: self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
+            except Exception: pass
+        if hasattr(socket, "TCP_KEEPINTVL"):
+            try: self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
+            except Exception: pass
+        if hasattr(socket, "TCP_KEEPCNT"):
+            try: self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+            except Exception: pass
+
+        self.sock.settimeout(timeout if timeout is not None else 30)
         self.sock.connect((self.host, self.port))
         if timeout is not None:
-            self.sock.settimeout(300)
+            self.sock.settimeout(30)
 
     def _reconnect(self):
-        """Attempt to reconnect to the worker node."""
+        """Attempt to reconnect to the worker node with network-resilient retry."""
         if self.is_reverse:
             return self.is_connected()
-        for attempt in range(self._max_retries):
+        for attempt in range(5):
             try:
-                self.connect()
+                self.connect(timeout=5)
                 return True
-            except Exception as e:
-                if attempt < self._max_retries - 1:
-                    time.sleep(self._retry_delay * (attempt + 1))
+            except Exception:
+                time.sleep(2)
         return False
 
     def send_cmd(self, msg):
-        """Send a command and return the response, with auto-reconnect."""
+        """Send a command and return the response, with dynamic timeout and auto-reconnect."""
         last_error = None
-        is_load = isinstance(msg, dict) and msg.get("cmd") == "load"
+        cmd = msg.get("cmd", "") if isinstance(msg, dict) else ""
+        # Dynamic timeouts: 300s for model weight load, 60s for prefill, 15s for decode token, 5s for ping
+        if cmd == "load":
+            cmd_timeout = 300
+        elif cmd in ("forward_stage", "forward_layer", "pipeline_forward_chain"):
+            # If hidden_states seq_len > 1, it's prefill; else 1 token decode
+            hs = msg.get("hidden_states")
+            is_prefill = hasattr(hs, "shape") and len(hs.shape) >= 2 and hs.shape[1] > 1
+            cmd_timeout = 75 if is_prefill else 15
+        elif cmd in ("ping", "get_memory", "clear_kv"):
+            cmd_timeout = 5
+        else:
+            cmd_timeout = 30
+
         for attempt in range(self._max_retries):
             try:
                 if not self.is_connected():
-                    self.connect()
+                    self.connect(timeout=5)
                 if self.sock:
-                    self.sock.settimeout(600 if is_load else 180)
+                    self.sock.settimeout(cmd_timeout)
                 sent = send_msg(self.sock, msg)
                 self.bytes_sent += sent
                 resp, recvd = recv_msg(self.sock)
@@ -382,7 +508,7 @@ class NodeConnection:
                 if resp.get("status") == "error":
                     raise RuntimeError(f"Worker error: {resp.get('msg', '?')}")
                 return resp
-            except (ConnectionError, OSError, EOFError, BrokenPipeError) as e:
+            except (ConnectionError, OSError, EOFError, BrokenPipeError, socket.timeout) as e:
                 last_error = e
                 self.sock = None  # mark as disconnected
                 if attempt < self._max_retries - 1:
@@ -562,26 +688,100 @@ class DistributedModel:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         print(f"\r  {C.OK} Tokenizer loaded")
 
-        config_path = model_dir / "config.json"
+        self.model_dir = Path(model_dir)
+        config_path = self.model_dir / "config.json"
         with open(config_path) as f:
             self.config = json.load(f)
 
-        dtype_str = self.config.get("torch_dtype", "float16")
-        dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16,
-                 "float32": torch.float32}.get(dtype_str, torch.float16)
 
-        if quant == "4bit" and BitsAndBytesConfig is not None:
-            print(f"  {C.CY}Loading model in 4-bit NF4 quantization (BitsAndBytes)...{C.RS}")
-            bnb_config = BitsAndBytesConfig(
+        # Resolve dtype — some VLM configs (e.g. Qwen3.8-27B) nest this under text_config
+        text_cfg_raw = self.config.get("text_config", {})
+        dtype_str = (self.config.get("torch_dtype")
+                     or text_cfg_raw.get("torch_dtype")
+                     or text_cfg_raw.get("dtype")
+                     or "bfloat16")
+        dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16,
+                 "float32": torch.float32}.get(dtype_str, torch.bfloat16)
+
+        # Check if we should activate Lazy Zero-RAM mode (safetensors present on disk)
+        # Prevents host RAM exhaustion on 16GB laptops by not loading 16GB weights into RAM at selection time
+        self.model_dir = Path(model_dir)
+        self.sf_path = self.model_dir / "model.safetensors"
+        use_lazy = self.sf_path.exists() and (quant == "4bit" or "quantization_config" in self.config)
+
+        if use_lazy:
+            print(f"  {C.CY}Activating Lazy Zero-RAM Mode (preserves host RAM on 16GB laptop)...{C.RS}")
+            self.is_lazy = True
+            from transformers import AutoConfig
+            from accelerate import init_empty_weights
+            from transformers.integrations import replace_with_bnb_linear
+            from transformers.models.qwen3_5 import Qwen3_5ForCausalLM
+            from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextRotaryEmbedding
+            from safetensors import safe_open
+
+            self.config_obj = AutoConfig.from_pretrained(str(model_dir))
+            text_cfg = getattr(self.config_obj, "text_config", self.config_obj)
+            self.bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_use_double_quant=True,
             )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                str(model_dir),
-                quantization_config=bnb_config,
-                device_map="auto"
-            )
+
+            with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+                keys = f.keys()
+                if any(k.startswith("model.language_model.") for k in keys):
+                    self.prefix_base = "model.language_model."
+                else:
+                    self.prefix_base = "model."
+
+            with init_empty_weights():
+                self.model = Qwen3_5ForCausalLM(text_cfg)
+            self.model = replace_with_bnb_linear(self.model, quantization_config=self.bnb_config)
+
+            self.embedding = self.model.model.embed_tokens
+            self.layers = list(self.model.model.layers)
+            self.norm = self.model.model.norm
+            self.lm_head = self.model.lm_head
+            self.rotary_emb = Qwen3_5TextRotaryEmbedding(text_cfg)
+            self.local_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            self.num_layers = len(self.layers)
+            self.hidden_size = text_cfg.hidden_size
+            self.num_kv_heads = getattr(text_cfg, "num_key_value_heads", text_cfg.num_attention_heads)
+            self.head_dim = self.hidden_size // text_cfg.num_attention_heads
+            self.dtype_size = 2
+            self.num_experts = 1
+            self.num_experts_per_tok = 1
+            self.is_moe = False
+            self.assignments = {}
+            self.is_distributed = False
+
+            print(f"  {C.OK} Model skeleton ready: {self.num_layers} layers (Lazy Zero-RAM Mode)")
+            print(f"  {C.G}→ 0 MB host RAM used. Allocation & streaming will load layers on-demand.{C.RS}")
+            return
+
+        if quant == "4bit" and BitsAndBytesConfig is not None:
+            print(f"  {C.CY}Loading model in 4-bit NF4 quantization (BitsAndBytes)...{C.RS}")
+            if hasattr(self, "config") and "quantization_config" in self.config:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    str(model_dir),
+                    device_map="auto"
+                )
+            else:
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=dtype,
+                    bnb_4bit_use_double_quant=True,
+                )
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    str(model_dir),
+                    quantization_config=bnb_config,
+                    device_map="auto"
+                )
+
+
         elif quant == "8bit" and BitsAndBytesConfig is not None:
             print(f"  {C.CY}Loading model in 8-bit quantization (BitsAndBytes)...{C.RS}")
             bnb_config = BitsAndBytesConfig(
@@ -604,6 +804,7 @@ class DistributedModel:
             print(f"  {C.CY}Loading model to CPU ({dtype_str})...{C.RS}")
             self.model = AutoModelForCausalLM.from_pretrained(str(model_dir), torch_dtype=dtype)
         self.model.eval()
+
         try:
             p = next(self.model.parameters())
             self.local_device = p.device
@@ -614,28 +815,136 @@ class DistributedModel:
         print(f"  {C.OK} Model loaded ({size_mb:.1f} MB in memory on {self.local_device})")
 
         # Extract references to sub-modules
-        inner = self.model.model if hasattr(self.model, "model") else self.model.transformer
+        # Standard path: model.model (LLaMA, Qwen2.5, etc.)
+        # Qwen3_5 VLM path: model.model.language_model (Qwen3.8-27B multimodal wrapper)
+        inner = None
+        if hasattr(self.model, "model"):
+            candidate = self.model.model
+            if hasattr(candidate, "language_model"):
+                # Qwen3_5ForConditionalGeneration: model -> model -> language_model
+                inner = candidate.language_model
+            elif hasattr(candidate, "layers") or hasattr(candidate, "h"):
+                inner = candidate
+            elif hasattr(candidate, "model") and hasattr(candidate.model, "layers"):
+                inner = candidate.model
+        if inner is None and hasattr(self.model, "transformer"):
+            inner = self.model.transformer
+        if inner is None:
+            raise RuntimeError(f"Cannot find transformer body in {type(self.model)}. "
+                               "Submodule 'layers' not found under model.model, "
+                               "model.model.language_model, or model.transformer.")
+
         self.embedding = inner.embed_tokens if hasattr(inner, "embed_tokens") else inner.wte
         self.layers = list(inner.layers if hasattr(inner, "layers") else inner.h)
         self.norm = inner.norm if hasattr(inner, "norm") else inner.ln_f
-        self.lm_head = self.model.lm_head
+        # lm_head may live on the top model or on the inner language_model
+        self.lm_head = getattr(self.model, "lm_head", None) or getattr(inner, "lm_head", None)
         self.rotary_emb = getattr(inner, "rotary_emb", None)
 
-        # Architecture info
+        # Architecture info — check text_config first (multimodal VLMs like Qwen3.8-27B)
+        text_cfg = self.config.get("text_config", {})
+        def _cfg(key, fallbacks, default=0):
+            for k in [key] + fallbacks:
+                if text_cfg.get(k) is not None:
+                    return text_cfg[k]
+                if self.config.get(k) is not None:
+                    return self.config[k]
+            return default
+
         self.num_layers = len(self.layers)
-        self.hidden_size = self.config.get("hidden_size", self.config.get("n_embd", 0))
-        nh = self.config.get("num_attention_heads", self.config.get("n_head", 1))
-        self.num_kv_heads = self.config.get("num_key_value_heads", nh)
+        self.hidden_size = _cfg("hidden_size", ["n_embd"])
+        nh = _cfg("num_attention_heads", ["n_head"], 1)
+        self.num_kv_heads = _cfg("num_key_value_heads", [], nh)
         self.head_dim = self.hidden_size // nh if nh else 0
-        self.dtype_size = {"float16": 2, "bfloat16": 2, "float32": 4}.get(dtype_str, 2)
-        self.num_experts = self.config.get("num_experts",
-                                           self.config.get("num_local_experts", 1))
+        dtype_str_arch = text_cfg.get("dtype", dtype_str) or dtype_str
+        self.dtype_size = {"float16": 2, "bfloat16": 2, "float32": 4}.get(dtype_str_arch, 2)
+        self.num_experts = _cfg("num_experts", ["num_local_experts"], 1)
+
         self.num_experts_per_tok = self.config.get("num_experts_per_tok", 1)
         self.is_moe = self.num_experts > 1
 
         # Initialize assignments — everything local
         self.assignments = {}
         self.is_distributed = False
+
+    def _lazy_load_layer(self, layer_idx: int, device: str = "cpu"):
+        """Load a single 4-bit layer from safetensors into memory or onto device."""
+        from accelerate import init_empty_weights
+        from transformers.integrations import replace_with_bnb_linear
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DecoderLayer
+        from safetensors import safe_open
+        import bitsandbytes as bnb
+
+        text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
+        with init_empty_weights():
+            layer = Qwen3_5DecoderLayer(text_cfg, layer_idx=layer_idx)
+        layer = replace_with_bnb_linear(layer, quantization_config=self.bnb_config)
+        layer.config = text_cfg
+        prefix = f"{self.prefix_base}layers.{layer_idx}."
+
+        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+            for name, param in layer.named_parameters():
+                full_k = prefix + name
+                if full_k in f.keys():
+                    t = f.get_tensor(full_k).to(device)
+                    parts = name.split(".")
+                    submod = layer
+                    for p in parts[:-1]:
+                        submod = getattr(submod, p)
+                    setattr(submod, parts[-1], torch.nn.Parameter(t, requires_grad=False))
+
+            for name, mod in layer.named_modules():
+                if isinstance(mod, bnb.nn.Linear4bit):
+                    weight_k = prefix + name + ".weight"
+                    if weight_k in f.keys():
+                        w = f.get_tensor(weight_k).to(device)
+                        qs_dict = {}
+                        for suffix in [".absmax", ".nested_absmax", ".nested_quant_map", ".quant_map", ".quant_state.bitsandbytes__nf4"]:
+                            k = weight_k + suffix
+                            if k in f.keys():
+                                qs_dict[suffix[1:]] = f.get_tensor(k).to(device)
+                        p4bit = bnb.nn.Params4bit.from_prequantized(
+                            data=w,
+                            quantized_stats=qs_dict,
+                            requires_grad=False,
+                            device=device,
+                            module=mod,
+                        )
+                        mod.weight = p4bit
+                        mod._is_hf_initialized = True
+        return _move_module_to_device(layer, device)
+
+    def _lazy_load_embed(self, device: str = "cpu"):
+        """Load token embedding from safetensors."""
+        from safetensors import safe_open
+        text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
+        embed = torch.nn.Embedding(text_cfg.vocab_size, text_cfg.hidden_size)
+        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+            t = f.get_tensor(f"{self.prefix_base}embed_tokens.weight").to(device)
+            embed.weight = torch.nn.Parameter(t, requires_grad=False)
+        return embed
+
+    def _lazy_load_norm(self, device: str = "cpu"):
+        """Load final RMSNorm from safetensors."""
+        from safetensors import safe_open
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNorm
+        text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
+        norm = Qwen3_5RMSNorm(text_cfg.hidden_size, eps=text_cfg.rms_norm_eps)
+        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+            t = f.get_tensor(f"{self.prefix_base}norm.weight").to(device)
+            norm.weight = torch.nn.Parameter(t, requires_grad=False)
+        return norm
+
+    def _lazy_load_head(self, device: str = "cpu"):
+        """Load lm_head from safetensors."""
+        from safetensors import safe_open
+        text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
+        head = torch.nn.Linear(text_cfg.hidden_size, text_cfg.vocab_size, bias=False)
+        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+            t = f.get_tensor("lm_head.weight").to(device)
+            head.weight = torch.nn.Parameter(t, requires_grad=False)
+        return head
+
 
     # ── Model Inspection ──────────────────────────────────────────────────
     def inspect_model(self):
@@ -646,49 +955,68 @@ class DistributedModel:
 
         hdr(f"MODEL INSPECTION: {self.model_id}")
 
-        total_params = sum(p.numel() for p in self.model.parameters())
-        total_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
+        total_params = sum(p.numel() for p in self.model.parameters()) if self.model else 0
+        is_4bit = getattr(self, "quant", "none") == "4bit" or getattr(self, "is_lazy", False)
+        
+        if getattr(self, "sf_path", None) and self.sf_path.exists():
+            total_bytes = self.sf_path.stat().st_size
+        elif is_4bit:
+            total_bytes = int(total_params * 0.5)
+        else:
+            total_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters()) if self.model else 0
 
-        dtype_str = getattr(next(self.model.parameters()), "dtype", "unknown")
-        elem_size = getattr(next(self.model.parameters()), "element_size", lambda: self.dtype_size)()
+        dtype_str = getattr(next(self.model.parameters(), None), "dtype", "bfloat16" if is_4bit else "unknown")
+        elem_size = 0.5 if is_4bit else (getattr(next(self.model.parameters(), None), "element_size", lambda: self.dtype_size)() if self.model else self.dtype_size)
 
         # Summary Info Card
         shdr("ARCHITECTURE OVERVIEW")
-        moe_desc = f"MoE ({self.num_experts} experts, top-{self.num_experts_per_tok} active/tok)" if self.is_moe else "Dense Transformer"
+        moe_desc = f"MoE ({self.num_experts} experts, top-{self.num_experts_per_tok} active/tok)" if self.is_moe else "Dense / Hybrid Transformer"
+        
+        # Safely resolve config / text_config
+        text_cfg_dict = {}
+        if isinstance(self.config, dict):
+            text_cfg_dict = self.config.get("text_config", {}) if isinstance(self.config.get("text_config"), dict) else self.config
+        
+        num_q_heads = text_cfg_dict.get("num_attention_heads", self.config.get("num_attention_heads", getattr(self, "num_attention_heads", "?")) if isinstance(self.config, dict) else "?")
+        vocab_size = text_cfg_dict.get("vocab_size", self.config.get("vocab_size", getattr(self.tokenizer, "vocab_size", "?")) if isinstance(self.config, dict) else "?")
+        vocab_str = f"{vocab_size:,}" if isinstance(vocab_size, (int, float)) else str(vocab_size)
+
         overview_rows = [
             ["Model Identifier", self.model_id],
             ["Architecture Type", moe_desc],
-            ["Precision / Dtype", f"{dtype_str} ({elem_size} bytes/param)"],
+            ["Precision / Dtype", f"{'4-bit NF4' if is_4bit else dtype_str} ({elem_size} bytes/param)"],
             ["Total Parameters", f"{total_params:,} ({fmt_params(total_params)})"],
             ["Total Model Memory", f"{C.G}{fmt_bytes(total_bytes)}{C.RS}"],
             ["", ""],
             ["Hidden Dimension (d_model)", f"{self.hidden_size:,}"],
             ["Transformer Layers", f"{self.num_layers}"],
-            ["Attention Heads (Q / KV)", f"{self.config.get('num_attention_heads', '?')} Q / {self.num_kv_heads} KV (Head dim: {self.head_dim})"],
-            ["Vocabulary Size", f"{self.config.get('vocab_size', '?'):,}"],
+            ["Attention Heads (Q / KV)", f"{num_q_heads} Q / {self.num_kv_heads} KV (Head dim: {self.head_dim})"],
+            ["Vocabulary Size", vocab_str],
         ]
         print(tabulate(overview_rows, tablefmt="rounded_outline", colalign=("left", "right")))
 
         # Component Breakdown
         shdr("TOP-LEVEL COMPONENT BREAKDOWN")
+        b_mult = 0.5 if is_4bit else 2.0
         emb_p = sum(p.numel() for p in self.embedding.parameters()) if self.embedding else 0
-        emb_b = sum(p.numel() * p.element_size() for p in self.embedding.parameters()) if self.embedding else 0
+        embed_elem_size = 2.0 if is_4bit else b_mult
+        emb_b = int(emb_p * embed_elem_size)
 
         layers_p = sum(sum(p.numel() for p in l.parameters()) for l in self.layers)
-        layers_b = sum(sum(p.numel() * p.element_size() for p in l.parameters()) for l in self.layers)
+        layers_b = int(layers_p * b_mult)
 
         norm_p = sum(p.numel() for p in self.norm.parameters()) if self.norm else 0
-        norm_b = sum(p.numel() * p.element_size() for p in self.norm.parameters()) if self.norm else 0
+        norm_b = int(norm_p * 2.0)
 
         head_p = sum(p.numel() for p in self.lm_head.parameters()) if self.lm_head else 0
-        head_b = sum(p.numel() * p.element_size() for p in self.lm_head.parameters()) if self.lm_head else 0
+        head_b = int(head_p * embed_elem_size)
         is_tied = (self.lm_head.weight.data_ptr() == self.embedding.weight.data_ptr()) if (hasattr(self.lm_head, "weight") and hasattr(self.embedding, "weight")) else False
 
         comp_rows = [
-            ["Token Embedding (embed_tokens)", f"{emb_p:,}", fmt_params(emb_p), f"{emb_p/total_params*100:.1f}%", fmt_bytes(emb_b)],
-            [f"Transformer Layers ({self.num_layers} layers)", f"{layers_p:,}", fmt_params(layers_p), f"{layers_p/total_params*100:.1f}%", fmt_bytes(layers_b)],
-            ["Final LayerNorm (norm)", f"{norm_p:,}", fmt_params(norm_p), f"{norm_p/total_params*100:.2f}%", fmt_bytes(norm_b)],
-            ["LM Head (lm_head)" + (" [tied with embed]" if is_tied else ""), f"{head_p:,}", fmt_params(head_p), f"{head_p/total_params*100:.1f}%", fmt_bytes(head_b)],
+            ["Token Embedding (embed_tokens) [bf16]", f"{emb_p:,}", fmt_params(emb_p), f"{emb_p/total_params*100:.1f}%" if total_params else "0%", fmt_bytes(emb_b)],
+            [f"Transformer Layers ({self.num_layers} layers) [4-bit]", f"{layers_p:,}", fmt_params(layers_p), f"{layers_p/total_params*100:.1f}%" if total_params else "0%", fmt_bytes(layers_b)],
+            ["Final LayerNorm (norm)", f"{norm_p:,}", fmt_params(norm_p), f"{norm_p/total_params*100:.2f}%" if total_params else "0%", fmt_bytes(norm_b)],
+            ["LM Head (lm_head) [bf16]" + (" [tied with embed]" if is_tied else ""), f"{head_p:,}", fmt_params(head_p), f"{head_p/total_params*100:.1f}%" if total_params else "0%", fmt_bytes(head_b)],
             ["", "", "", "", ""],
             [f"{C.B}TOTAL MODEL{C.RS}", f"{C.B}{total_params:,}{C.RS}", f"{C.B}{fmt_params(total_params)}{C.RS}", "100.0%", f"{C.G}{fmt_bytes(total_bytes)}{C.RS}"],
         ]
@@ -699,34 +1027,40 @@ class DistributedModel:
         sample_layer = self.layers[1] if (len(self.layers) > 1 and self.is_moe) else self.layers[0]
         sub_rows = []
 
-        # Attention sub-block
-        attn = sample_layer.self_attn
-        attn_p = sum(p.numel() for p in attn.parameters())
-        attn_b = sum(p.numel() * p.element_size() for p in attn.parameters())
-        for name, p in attn.named_parameters():
-            sub_rows.append([f"  • Attention: {name}", list(p.shape), f"{p.numel():,}", fmt_params(p.numel()), fmt_bytes(p.numel() * p.element_size())])
-        sub_rows.append([f"{C.CY}► Total Self-Attention{C.RS}", "", f"{attn_p:,}", fmt_params(attn_p), fmt_bytes(attn_b)])
-        sub_rows.append(["", "", "", "", ""])
+        # Attention sub-block (support both self_attn and linear_attn for hybrid models)
+        attn = getattr(sample_layer, "self_attn", getattr(sample_layer, "linear_attn", None))
+        attn_name_title = "Linear Attention" if hasattr(sample_layer, "linear_attn") and not hasattr(sample_layer, "self_attn") else "Self-Attention"
+        if attn is not None:
+            attn_p = sum(p.numel() for p in attn.parameters())
+            attn_b = int(attn_p * b_mult)
+            for name, p in attn.named_parameters():
+                p_b = int(p.numel() * b_mult)
+                sub_rows.append([f"  • Attention: {name}", list(p.shape), f"{p.numel():,}", fmt_params(p.numel()), fmt_bytes(p_b)])
+            sub_rows.append([f"{C.CY}► Total {attn_name_title}{C.RS}", "", f"{attn_p:,}", fmt_params(attn_p), fmt_bytes(attn_b)])
+            sub_rows.append(["", "", "", "", ""])
 
         # FFN / MoE sub-block
-        mlp = sample_layer.mlp
-        mlp_p = sum(p.numel() for p in mlp.parameters())
-        mlp_b = sum(p.numel() * p.element_size() for p in mlp.parameters())
-        for name, p in mlp.named_parameters():
-            sub_rows.append([f"  • MLP/MoE: {name}", list(p.shape), f"{p.numel():,}", fmt_params(p.numel()), fmt_bytes(p.numel() * p.element_size())])
-        sub_rows.append([f"{C.CY}► Total FFN/MoE Block{C.RS}", "", f"{mlp_p:,}", fmt_params(mlp_p), fmt_bytes(mlp_b)])
-        sub_rows.append(["", "", "", "", ""])
+        mlp = getattr(sample_layer, "mlp", None)
+        if mlp is not None:
+            mlp_p = sum(p.numel() for p in mlp.parameters())
+            mlp_b = int(mlp_p * b_mult)
+            for name, p in mlp.named_parameters():
+                p_b = int(p.numel() * b_mult)
+                sub_rows.append([f"  • MLP/MoE: {name}", list(p.shape), f"{p.numel():,}", fmt_params(p.numel()), fmt_bytes(p_b)])
+            sub_rows.append([f"{C.CY}► Total FFN/MoE Block{C.RS}", "", f"{mlp_p:,}", fmt_params(mlp_p), fmt_bytes(mlp_b)])
+            sub_rows.append(["", "", "", "", ""])
 
         # Norms
-        in_norm_p = sum(p.numel() for p in sample_layer.input_layernorm.parameters())
-        in_norm_b = sum(p.numel() * p.element_size() for p in sample_layer.input_layernorm.parameters())
-        post_norm_p = sum(p.numel() for p in sample_layer.post_attention_layernorm.parameters())
-        post_norm_b = sum(p.numel() * p.element_size() for p in sample_layer.post_attention_layernorm.parameters())
-        sub_rows.append(["  • input_layernorm", list(sample_layer.input_layernorm.weight.shape), f"{in_norm_p:,}", fmt_params(in_norm_p), fmt_bytes(in_norm_b)])
-        sub_rows.append(["  • post_attention_layernorm", list(sample_layer.post_attention_layernorm.weight.shape), f"{post_norm_p:,}", fmt_params(post_norm_p), fmt_bytes(post_norm_b)])
+        for norm_attr in ["input_layernorm", "post_attention_layernorm"]:
+            norm_mod = getattr(sample_layer, norm_attr, None)
+            if norm_mod is not None:
+                in_norm_p = sum(p.numel() for p in norm_mod.parameters())
+                in_norm_b = int(in_norm_p * 2.0)
+                shape_str = list(norm_mod.weight.shape) if hasattr(norm_mod, "weight") else []
+                sub_rows.append([f"  • {norm_attr}", shape_str, f"{in_norm_p:,}", fmt_params(in_norm_p), fmt_bytes(in_norm_b)])
 
         layer_tot_p = sum(p.numel() for p in sample_layer.parameters())
-        layer_tot_b = sum(p.numel() * p.element_size() for p in sample_layer.parameters())
+        layer_tot_b = int(layer_tot_p * b_mult)
         sub_rows.append(["", "", "", "", ""])
         sub_rows.append([f"{C.B}► TOTAL PER LAYER{C.RS}", "", f"{C.B}{layer_tot_p:,}{C.RS}", f"{C.B}{fmt_params(layer_tot_p)}{C.RS}", f"{C.G}{fmt_bytes(layer_tot_b)}{C.RS}"])
 
@@ -738,7 +1072,7 @@ class DistributedModel:
         cum_bytes = emb_b
         for idx, lyr in enumerate(self.layers):
             l_p = sum(p.numel() for p in lyr.parameters())
-            l_b = sum(p.numel() * p.element_size() for p in lyr.parameters())
+            l_b = int(l_p * b_mult)
             cum_bytes += l_b
             
             # Check assignment
@@ -915,9 +1249,9 @@ class DistributedModel:
         for info in self.assignments.values():
             node = info["node"]
             if id(node) not in notified_nodes:
+                notified_nodes.add(id(node))
                 try:
                     node.send_cmd({"cmd": "start_profiling"})
-                    notified_nodes.add(id(node))
                 except Exception as e:
                     print(f"  ⚠ Failed to start profiling on {node.label}: {e}")
                     
@@ -984,11 +1318,11 @@ class DistributedModel:
         for info in self.assignments.values():
             node = info["node"]
             if id(node) not in notified_nodes:
+                notified_nodes.add(id(node))
                 try:
                     resp = node.send_cmd({"cmd": "stop_profiling"})
                     if resp.get("status") == "ok":
                         print(f"  📊 Worker {node.label} profile saved to {resp.get('saved_path')}")
-                    notified_nodes.add(id(node))
                 except Exception as e:
                     print(f"  ⚠ Failed to stop profiling on {node.label}: {e}")
 
@@ -1000,16 +1334,24 @@ class DistributedModel:
 
         # Query remote workers for already-cached components
         node_loaded_comps = {}
+        node_disk_comps = {}
         for info in self.assignments.values():
             node = info["node"]
             if id(node) not in node_loaded_comps:
                 try:
                     if not node.is_connected():
                         node.connect()
-                    chk = node.send_cmd({"cmd": "check_components", "model_id": self.model_id})
+                    req_comps = [cid for cid, cinfo in self.assignments.items() if cinfo["node"] == node]
+                    chk = node.send_cmd({
+                        "cmd": "check_components",
+                        "model_id": self.model_id,
+                        "required_components": req_comps,
+                    })
                     node_loaded_comps[id(node)] = set(chk.get("loaded", []))
+                    node_disk_comps[id(node)] = set(chk.get("disk_cached", []))
                 except Exception:
                     node_loaded_comps[id(node)] = set()
+                    node_disk_comps[id(node)] = set()
 
         if not hasattr(self, "sent_components"):
             self.sent_components = set()
@@ -1027,18 +1369,29 @@ class DistributedModel:
                 print(f"  {C.OK} {comp_id} already cached on {node.label} for {self.model_id}, skipping transfer!")
                 continue
 
+            # If worker has it in disk cache, command worker to load it from disk into VRAM
+            if comp_id in node_disk_comps.get(id(node), set()):
+                print(f"  {C.CY}Loading {comp_id} from worker disk on {node.label}...{C.RS}", end="", flush=True)
+                try:
+                    resp = node.send_cmd({
+                        "cmd": "load_disk_component",
+                        "component_id": comp_id,
+                        "model_id": self.model_id,
+                    })
+                    if resp.get("status") == "ok":
+                        size = resp.get("size_bytes", 0)
+                        print(f"\r  {C.OK} Loaded {comp_id} from disk on {node.label} ({fmt_bytes(size)})")
+                        node_loaded_comps.setdefault(id(node), set()).add(comp_id)
+                        continue
+                except Exception as e:
+                    print(f"\r  {C.WN} Disk load failed for {comp_id}, falling back to network transfer: {e}")
+
             # Extract the sub-module
             module = self._extract_module(comp_type, layer_idx, expert_idx)
             if module is None:
                 print(f"  {C.FL} Cannot extract: {comp_id}")
                 all_success = False
                 continue
-
-            # Remap layer_idx for KV cache (always use 0 on worker)
-            if comp_type in ("layer", "attention") and hasattr(module, "self_attn"):
-                attn = module.self_attn if comp_type == "layer" else module
-                if hasattr(attn, "layer_idx"):
-                    attn.layer_idx = 0
 
             # Send to worker
             print(f"  {C.CY}Sending {comp_id} to {node.label}...{C.RS}", end="", flush=True)
@@ -1061,6 +1414,13 @@ class DistributedModel:
                 print(f"\r  {C.FL} Failed to send {comp_id}: {e}")
                 all_success = False
                 continue
+            finally:
+                if getattr(self, "is_lazy", False):
+                    try:
+                        del module
+                    except Exception:
+                        pass
+                    gc.collect()
 
         if not all_success:
             print(f"\n  {C.FL} Distribution incomplete: one or more components failed to transfer. Please retry Apply & Load.{C.RS}")
@@ -1068,6 +1428,48 @@ class DistributedModel:
             return False
 
         gc.collect()
+
+        # In Lazy Zero-RAM mode: Load ONLY Master's assigned local components directly into target GPU VRAM!
+        if getattr(self, "is_lazy", False):
+            target_gpu_dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print(f"\n  {C.CY}Loading assigned local components directly into {target_gpu_dev} VRAM...{C.RS}")
+
+            if "embedding" not in self.assignments:
+                print(f"  {C.CY}Loading local embedding to {target_gpu_dev}...{C.RS}", end="", flush=True)
+                self.embedding = self._lazy_load_embed(device=target_gpu_dev)
+                print(f"\r  {C.OK} Local embedding loaded into {target_gpu_dev} VRAM")
+
+            if "lm_head" not in self.assignments:
+                print(f"  {C.CY}Loading local norm & head to {target_gpu_dev}...{C.RS}", end="", flush=True)
+                self.norm = self._lazy_load_norm(device=target_gpu_dev)
+                self.lm_head = self._lazy_load_head(device=target_gpu_dev)
+                print(f"\r  {C.OK} Local norm & head loaded into {target_gpu_dev} VRAM")
+
+            local_layer_count = 0
+            for i in range(self.num_layers):
+                lid = f"layer_{i}"
+                if lid not in self.assignments:
+                    print(f"\r  {C.CY}Loading local {lid} into {target_gpu_dev} VRAM...{C.RS}", end="", flush=True)
+                    self.layers[i] = self._lazy_load_layer(i, device=target_gpu_dev)
+                    local_layer_count += 1
+
+            if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
+                self.rotary_emb = self.rotary_emb.to(target_gpu_dev)
+
+            self.local_device = target_gpu_dev
+            gc.collect()
+            if target_gpu_dev.type == "cuda":
+                torch.cuda.empty_cache()
+                vram_used = torch.cuda.memory_allocated(0) / (1024**2)
+                print(f"\r  {C.OK} {local_layer_count} local layer(s) loaded into {target_gpu_dev} VRAM ({vram_used:.1f} MB allocated)")
+            else:
+                print(f"\r  {C.OK} {local_layer_count} local layer(s) loaded into {target_gpu_dev}")
+
+            print(f"  {C.G}→ Host RAM usage: 0 MB! Complete immunity from RAM overflow.{C.RS}")
+            self.is_distributed = True
+            print(f"  {C.OK} Distribution applied successfully!")
+            return True
+
 
         # Dynamically calculate remaining local component sizes and offload to GPU VRAM if they fit
         local_modules = []
@@ -1127,7 +1529,7 @@ class DistributedModel:
                 if local_bytes <= safe_vram_limit:
                     print(f"  {C.CY}Offloading all {len(local_modules)} local component(s) ({fmt_bytes(local_bytes)}) to {target_gpu_dev}...{C.RS}", end="", flush=True)
                     for name, mod in local_modules:
-                        mod.to(target_gpu_dev)
+                        _move_module_to_device(mod, target_gpu_dev)
                     if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
                         try: self.rotary_emb.to(target_gpu_dev)
                         except Exception: pass
@@ -1142,11 +1544,11 @@ class DistributedModel:
                     for name, mod in local_modules:
                         mod_bytes = sum(p.numel() * p.element_size() for p in mod.parameters()) + sum(b.numel() * b.element_size() for b in mod.buffers())
                         if gpu_bytes + mod_bytes <= safe_vram_limit:
-                            mod.to(target_gpu_dev)
+                            _move_module_to_device(mod, target_gpu_dev)
                             gpu_bytes += mod_bytes
                             gpu_mods.append(name)
                         else:
-                            mod.to("cpu")
+                            _move_module_to_device(mod, "cpu")
                             cpu_mods.append(name)
 
                     if hasattr(self, "rotary_emb") and self.rotary_emb is not None:
@@ -1172,21 +1574,33 @@ class DistributedModel:
         """Extract a sub-module from the model (returns a copy on CPU)."""
         import copy
         try:
+            if getattr(self, "is_lazy", False):
+                if comp_type == "embedding":
+                    return self._lazy_load_embed(device="cpu")
+                elif comp_type == "lm_head":
+                    norm_mod = self._lazy_load_norm(device="cpu")
+                    head_mod = self._lazy_load_head(device="cpu")
+                    return torch.nn.Sequential(norm_mod, head_mod)
+                elif comp_type == "layer":
+                    return self._lazy_load_layer(layer_idx, device="cpu")
+                elif comp_type == "attention":
+                    layer = self._lazy_load_layer(layer_idx, device="cpu")
+                    return getattr(layer, "self_attn", None) or getattr(layer, "linear_attn", None)
+                elif comp_type == "ffn":
+                    layer = self._lazy_load_layer(layer_idx, device="cpu")
+                    return layer.mlp
+                elif comp_type == "expert":
+                    layer = self._lazy_load_layer(layer_idx, device="cpu")
+                    return layer.mlp.experts[expert_idx]
+                return None
+
             if comp_type == "embedding":
                 mod = copy.deepcopy(self.embedding)
             elif comp_type == "lm_head":
-                # Bundle norm + lm_head together
-                class NormAndHead(torch.nn.Module):
-                    def __init__(self, norm, head):
-                        super().__init__()
-                        self.norm = norm
-                        self.head = head
-                    def forward(self, x):
-                        return self.head(self.norm(x))
-                mod = NormAndHead(
-                    copy.deepcopy(self.norm),
-                    copy.deepcopy(self.lm_head)
-                )
+                # Bundle norm + lm_head together with torch.nn.Sequential for pickle compatibility
+                norm_mod = copy.deepcopy(self.norm) if self.norm is not None else torch.nn.Identity()
+                head_mod = copy.deepcopy(self.lm_head)
+                mod = torch.nn.Sequential(norm_mod, head_mod)
             elif comp_type == "layer":
                 mod = copy.deepcopy(self.layers[layer_idx])
             elif comp_type == "attention":
@@ -1212,15 +1626,31 @@ class DistributedModel:
             print(f"  {C.R}Extract error: {e}{C.RS}")
         return None
 
+
     def _remove_local_module(self, comp_type, layer_idx, expert_idx):
         """Keep local layers intact in memory to allow dynamic re-splitting and clearing assignments without reloading."""
         pass
 
     # ── Distributed Forward Pass ──────────────────────────────────────────
     @torch.no_grad()
-    def generate(self, prompt, max_new_tokens=128, temperature=0.0):
+    def generate(self, prompt, max_new_tokens=128, temperature=0.0, callback=None, stop=None, **kwargs):
         """Run distributed autoregressive generation."""
         device = self.local_device
+
+        # Collect stop token IDs
+        stop_token_ids = set()
+        if hasattr(self.tokenizer, "eos_token_id") and self.tokenizer.eos_token_id is not None:
+            if isinstance(self.tokenizer.eos_token_id, (list, tuple, set)):
+                stop_token_ids.update(self.tokenizer.eos_token_id)
+            else:
+                stop_token_ids.add(self.tokenizer.eos_token_id)
+        for special in ("<|im_end|>", "<|endoftext|>", "<|eot_id|>", "</s>"):
+            try:
+                sid = self.tokenizer.convert_tokens_to_ids(special)
+                if isinstance(sid, int) and sid > 0:
+                    stop_token_ids.add(sid)
+            except Exception:
+                pass
 
         # Verify that all assigned remote components are currently loaded on workers (auto-heal if worker restarted)
         for cid, info in self.assignments.items():
@@ -1236,10 +1666,6 @@ class DistributedModel:
                     expert_idx = info.get("expert_idx")
                     module = self._extract_module(comp_type, layer_idx, expert_idx)
                     if module is not None:
-                        if comp_type in ("layer", "attention") and hasattr(module, "self_attn"):
-                            attn = module.self_attn if comp_type == "layer" else module
-                            if hasattr(attn, "layer_idx"):
-                                attn.layer_idx = 0
                         print(f"  {C.CY}Auto-loading missing {cid} to {node.label}...{C.RS}", end="", flush=True)
                         node.send_cmd({
                             "cmd": "load",
@@ -1292,34 +1718,52 @@ class DistributedModel:
             torch.cuda.synchronize()
         ttft = time.perf_counter() - t_prefill_start
 
+        # Repetition penalty
+        rep_penalty = float(kwargs.get("repetition_penalty", 1.0))
+
         # Sample first token
-        first_token = self._sample(logits, temperature)
-        generated_ids.append(first_token.item())
-        tok_str = self.tokenizer.decode([first_token.item()], skip_special_tokens=True)
-        print(tok_str, end="", flush=True)
-
-        # ── Decode Loop ───────────────────────────────────────────────────
-        next_token = first_token
-        for step in range(max_new_tokens - 1):
-            t0 = time.perf_counter()
-
-            tok_input = next_token.view(1, 1).to(device)
-            logits = self._forward_pass(tok_input, is_prefill=False)
-            self.total_past_len += 1
-
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-
-            next_token = self._sample(logits, temperature)
-            token_times.append(time.perf_counter() - t0)
-
-            tok_id = next_token.item()
+        first_token = self._sample(logits, temperature, repetition_penalty=rep_penalty)
+        tok_id = first_token.item()
+        if tok_id not in stop_token_ids:
             generated_ids.append(tok_id)
             tok_str = self.tokenizer.decode([tok_id], skip_special_tokens=True)
             print(tok_str, end="", flush=True)
+            if callback is not None:
+                try: callback(tok_str)
+                except Exception: pass
 
-            if tok_id == self.tokenizer.eos_token_id:
-                break
+        # ── Decode Loop ───────────────────────────────────────────────────
+        next_token = first_token
+        if tok_id not in stop_token_ids:
+            for step in range(max_new_tokens - 1):
+                t0 = time.perf_counter()
+
+                tok_input = next_token.view(1, 1).to(device)
+                logits = self._forward_pass(tok_input, is_prefill=False)
+                self.total_past_len += 1
+
+                if device.type == "cuda":
+                    torch.cuda.synchronize()
+
+                next_token = self._sample(logits, temperature, generated_ids=generated_ids, repetition_penalty=rep_penalty)
+                token_times.append(time.perf_counter() - t0)
+
+                tok_id = next_token.item()
+                if tok_id in stop_token_ids:
+                    break
+
+                generated_ids.append(tok_id)
+                tok_str = self.tokenizer.decode([tok_id], skip_special_tokens=True)
+                print(tok_str, end="", flush=True)
+                if callback is not None:
+                    try: callback(tok_str)
+                    except Exception: pass
+
+                if stop:
+                    curr_str = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+                    stop_strs = [stop] if isinstance(stop, str) else list(stop)
+                    if any(s in curr_str for s in stop_strs):
+                        break
 
         print(f"{C.RS}\n")
         vram_after = torch.cuda.memory_allocated() if device.type == "cuda" else 0
@@ -1449,6 +1893,7 @@ class DistributedModel:
             "kv_total": kv_total, "kv_per_token": kv_per_token,
             "vram_before": vram_before, "vram_after": vram_after,
             "node_mem_stats": node_mem_stats,
+            "text": self.tokenizer.decode(generated_ids, skip_special_tokens=True),
         }
 
         # Display stats
@@ -1547,23 +1992,25 @@ class DistributedModel:
             i += 1
 
         # 5. Norm + LM head
+        # We only need the logits for the last token to predict the next token!
+        hidden_last = hidden[:, -1:, :]
         if "lm_head" in self.assignments:
             node = self.assignments["lm_head"]["node"]
             resp = node.send_cmd({
                 "cmd": "forward_lm_head",
                 "component_id": "lm_head",
-                "hidden_states": hidden.cpu(),
+                "hidden_states": hidden_last.cpu(),
             })
             logits = resp["logits"].to(device)
         else:
             if hasattr(self, "norm") and self.norm is not None:
                 norm_dev = next(self.norm.parameters()).device if list(self.norm.parameters()) else device
-                hidden = self.norm(hidden.to(norm_dev))
+                hidden_last = self.norm(hidden_last.to(norm_dev))
             if hasattr(self, "lm_head") and self.lm_head is not None:
                 head_dev = next(self.lm_head.parameters()).device if list(self.lm_head.parameters()) else device
-                logits = self.lm_head(hidden.to(head_dev))
+                logits = self.lm_head(hidden_last.to(head_dev))
             else:
-                logits = hidden
+                logits = hidden_last
 
         return logits[:, -1, :]
 
@@ -1611,12 +2058,14 @@ class DistributedModel:
             pos_emb = tuple(p.to(layer_dev) if isinstance(p, torch.Tensor) else p for p in pos_emb)
 
         if idx not in self.local_kv:
-            self.local_kv[idx] = DynamicCache()
+            from transformers import DynamicCache
+            cfg = getattr(self, "config_obj", None)
+            text_cfg = getattr(cfg, "text_config", cfg) if cfg is not None else getattr(getattr(layer, "mlp", None), "config", None)
+            try:
+                self.local_kv[idx] = DynamicCache(config=text_cfg) if text_cfg is not None else DynamicCache()
+            except Exception:
+                self.local_kv[idx] = DynamicCache()
         cache = self.local_kv[idx]
-
-        orig_idx = getattr(layer.self_attn, "layer_idx", 0) if hasattr(layer, "self_attn") else 0
-        if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
-            layer.self_attn.layer_idx = 0
 
         kwargs = dict(position_ids=position_ids, past_key_values=cache, use_cache=True, attention_mask=None)
         if pos_emb is not None:
@@ -1643,10 +2092,10 @@ class DistributedModel:
                     kwargs.pop("attention_mask", None)
                     outputs = layer(hidden, **kwargs)
 
-        if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
-            layer.self_attn.layer_idx = orig_idx
-
-        return outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+        res = outputs if isinstance(outputs, torch.Tensor) else outputs[0]
+        if res.ndim == 2:
+            res = res.unsqueeze(0)
+        return res
 
     def _send_cmd_with_dtype_recovery(self, node, msg):
         """Send command to worker, auto-recovering from any remote PyTorch CPU dtype mismatch."""
@@ -1936,7 +2385,15 @@ class DistributedModel:
         hidden = residual.to(hidden.device) + final_hidden_states
         return hidden
 
-    def _sample(self, logits, temperature):
+    def _sample(self, logits, temperature, generated_ids=None, repetition_penalty=1.0):
+        if repetition_penalty != 1.0 and generated_ids:
+            logits = logits.clone()
+            for prev_id in set(generated_ids):
+                val = logits[0, prev_id]
+                if val < 0:
+                    logits[0, prev_id] = val * repetition_penalty
+                else:
+                    logits[0, prev_id] = val / repetition_penalty
         if temperature <= 0:
             return torch.argmax(logits, dim=-1)
         scaled = logits / temperature
@@ -2198,14 +2655,12 @@ Node Memory Breakdown (Layer Weights + Active KV Cache):
             print(f"  {C.WN} Failed to write CSV log: {e}")
 
     def cleanup(self):
-        """Unload all remote components and close connections."""
-        for comp_id, info in self.assignments.items():
+        """Close connections while preserving remote worker cache in VRAM and disk."""
+        for info in self.assignments.values():
             try:
-                info["node"].send_cmd({"cmd": "unload", "component_id": comp_id})
+                info["node"].close()
             except Exception:
                 pass
-        for info in self.assignments.values():
-            info["node"].close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2376,6 +2831,7 @@ class CLI:
             elif c == 3: self._inspect_menu()
             elif c == 4: self._distribution_menu()
             elif c == 5: self._inference_menu()
+            elif c == 6: self._api_server_menu()
             elif c == 0:
                 self.reverse_listener.stop()
                 self.dist_model.cleanup()
@@ -2411,8 +2867,9 @@ class CLI:
   {C.B}3.{C.RS} Inspect Model Parameters & Sizes  {"" if self.dist_model.model else f"{C.D}(load model first){C.RS}"}
   {C.B}4.{C.RS} Configure Distribution            {"" if self.dist_model.model else f"{C.D}(load model first){C.RS}"}
   {C.B}5.{C.RS} Run Inference                     {f"{C.G}Ready{C.RS}" if ready else f"{C.D}(configure first){C.RS}"}
+  {C.B}6.{C.RS} Start OpenAI API Server (HTTP /v1){f"{C.G}Ready{C.RS}" if ready else f"{C.D}(configure first){C.RS}"}
   {C.B}0.{C.RS} Exit""")
-        return ask("Select [0-5]:", range(0, 6))
+        return ask("Select [0-6]:", range(0, 7))
 
     def _inspect_menu(self):
         if self.dist_model.model is None:
@@ -2525,6 +2982,14 @@ class CLI:
     # ── Model Selection ──────────────────────────────────────────────────
     def _model_menu(self):
         downloaded = set()
+        for m in MODELS:
+            try:
+                p = Path(m["id"])
+                if p.exists() and (p / "config.json").exists():
+                    if list(p.glob("*.safetensors")) or list(p.glob("*.bin")):
+                        downloaded.add(m["id"])
+            except Exception:
+                pass
         try:
             ci = scan_cache_dir(str(CACHE_DIR))
             for r in ci.repos:
@@ -2535,17 +3000,20 @@ class CLI:
                         break
         except: pass
 
+
         hdr("SELECT A MODEL")
         rows = []
         for i, m in enumerate(MODELS, 1):
             st = f"{C.G}✓{C.RS}" if m["id"] in downloaded else f"{C.D}✗{C.RS}"
             g = f" {C.Y}🔒{C.RS}" if m.get("gated") else ""
-            tc = C.MG if m["type"] == "MoE" else C.BL
-            rows.append([f"{C.B}{i}{C.RS}", m["name"]+g, f"{tc}{m['type']}{C.RS}",
+            fq = f" {C.CY}[4bit]{C.RS}" if m.get("force_quant") else ""
+            tc = C.MG if m["type"] == "MoE" else (C.Y if "/" in m["type"] else C.BL)
+            rows.append([f"{C.B}{i}{C.RS}", m["name"]+g+fq, f"{tc}{m['type']}{C.RS}",
                          f"~{m['gb']:.1f} GB", st])
-        print(tabulate(rows, headers=["#", "Model", "Type", "Size", "DL"],
+        print(tabulate(rows, headers=["#", "Model", "Type", "Size (4bit)", "DL"],
                        tablefmt="rounded_outline"))
         print(f"  {C.B}{len(MODELS)+1}{C.RS} Load from local folder...")
+
 
         c = ask(f"Select [1-{len(MODELS)+1}] (0=back):", range(0, len(MODELS)+2))
         if c <= 0: return
@@ -2573,7 +3041,12 @@ class CLI:
             self.selected_model = model
 
             has_weights = False
-            if model["id"] in downloaded:
+            p_local = Path(model["id"])
+            if p_local.exists() and (p_local / "config.json").exists():
+                self.model_dir = p_local
+                if list(self.model_dir.glob("*.safetensors")) or list(self.model_dir.glob("*.bin")):
+                    has_weights = True
+            elif model["id"] in downloaded:
                 try:
                     ci = scan_cache_dir(str(CACHE_DIR))
                     for r in ci.repos:
@@ -2586,10 +3059,15 @@ class CLI:
                                     break
                 except: pass
 
+
             if has_weights:
                 print(f"  {C.OK} Already downloaded.")
             else:
                 print(f"  {C.CY}Downloading {model['name']} (resumable)...{C.RS}")
+                if model.get("force_quant"):
+                    print(f"  {C.Y}ℹ  Downloading pre-quantized 4-bit weights (~{model['gb']:.1f} GB total).")
+                    print(f"     Full-precision 54 GB download is bypassed — saving data.{C.RS}")
+
                 max_retries = 10
                 download_success = False
                 for attempt in range(1, max_retries + 1):
@@ -2612,16 +3090,27 @@ class CLI:
                             print(f"\n  {C.FL} Download failed after {max_retries} attempts: {e}")
                             return
 
-        # Select Quantization
-        shdr("SELECT QUANTIZATION PRECISION")
-        print(f"""
+        # Select Quantization — auto-lock if model has force_quant
+        force_quant = self.selected_model.get("force_quant")
+        if force_quant:
+            quant_mode = force_quant
+            shdr("QUANTIZATION PRECISION (LOCKED)")
+            qname = {"4bit": "4-bit NF4 (BitsAndBytes)", "8bit": "8-bit (BitsAndBytes)", "int8": "8-bit Dynamic (PyTorch int8)"}.get(quant_mode, quant_mode)
+            print(f"\n  {C.CY}⚙ Quantization auto-locked to: {C.W}{qname}{C.RS}")
+            note = self.selected_model.get("note", "")
+            if note:
+                print(f"  {C.Y}ℹ  {note}{C.RS}")
+            print(f"\n  {C.G}→ This model requires {qname} to run on your hardware.{C.RS}\n")
+        else:
+            shdr("SELECT QUANTIZATION PRECISION")
+            print(f"""
   {C.B}1.{C.RS} Full Precision (bfloat16/float16 — Original weights)
   {C.B}2.{C.RS} 4-bit NF4 Quantization (BitsAndBytes — 75% memory reduction, fast network!)
   {C.B}3.{C.RS} 8-bit Quantization (BitsAndBytes — 50% memory reduction)
   {C.B}4.{C.RS} 8-bit Dynamic Quantization (PyTorch native int8 — CPU friendly)
 """)
-        qc = ask("Select Quantization [1-4] (default 1):", range(1, 5))
-        quant_mode = {1: "none", 2: "4bit", 3: "8bit", 4: "int8"}.get(qc, "none")
+            qc = ask("Select Quantization [1-4] (default 1):", range(1, 5))
+            quant_mode = {1: "none", 2: "4bit", 3: "8bit", 4: "int8"}.get(qc, "none")
 
         # Load model
         self.dist_model = DistributedModel()
@@ -2631,6 +3120,7 @@ class CLI:
         
         # Save config
         self._save_config()
+
 
     # ── Distribution Config ──────────────────────────────────────────────
     def _distribution_menu(self):
@@ -2873,6 +3363,24 @@ class CLI:
                     dm.stop_profiling()
 
             input(f"\n  {C.D}Press Enter to continue...{C.RS}")
+
+    def _api_server_menu(self):
+        dm = self.dist_model
+        if dm.model is None:
+            print(f"\n  {C.Y}Load a model first (option 2).{C.RS}")
+            return
+        if not dm.is_distributed:
+            print(f"\n  {C.Y}Configure and apply distribution first (option 4 -> option 8).{C.RS}")
+            return
+
+        hdr("OPENAI-COMPATIBLE API SERVER")
+        port = ask_int("Enter HTTP Port for API Server", 8000)
+        try:
+            import openai_server
+            openai_server.start_server(dm, host="0.0.0.0", port=port)
+        except Exception as e:
+            print(f"\n  {C.FL} API Server error: {e}")
+        input(f"\n  {C.D}Press Enter to continue...{C.RS}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
