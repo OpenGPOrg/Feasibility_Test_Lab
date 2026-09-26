@@ -69,6 +69,9 @@ MODELS = [
     {"id": "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen27B_4", "name": "Qwen3.8 27B Local (4-bit)", "type": "Dense/Hybrid", "gb": 16.6,
      "force_quant": "4bit",
      "note": "Local pre-quantized 4-bit NF4 (qwen27B_4). 64-layer hybrid. Needs 5.6 GB Master + 15 GB Worker."},
+    {"id": "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen35B_uncensored_4bit", "name": "Qwen 35B Uncensored (4-bit)", "type": "Dense", "gb": 18.8,
+     "force_quant": "4bit",
+     "note": "Local pre-quantized 4-bit NF4 abliterated uncensored model (~18.8 GB). Needs ~4.8 GB Master + ~14.8 GB Worker."},
 ]
 
 
@@ -707,7 +710,9 @@ class DistributedModel:
         # Prevents host RAM exhaustion on 16GB laptops by not loading 16GB weights into RAM at selection time
         self.model_dir = Path(model_dir)
         self.sf_path = self.model_dir / "model.safetensors"
-        use_lazy = self.sf_path.exists() and (quant == "4bit" or "quantization_config" in self.config)
+        self.sf_index_path = self.model_dir / "model.safetensors.index.json"
+        self.is_sharded = self.sf_index_path.exists()
+        use_lazy = (self.sf_path.exists() or self.is_sharded) and (quant == "4bit" or "quantization_config" in self.config)
 
         if use_lazy:
             print(f"  {C.CY}Activating Lazy Zero-RAM Mode (preserves host RAM on 16GB laptop)...{C.RS}")
@@ -715,8 +720,6 @@ class DistributedModel:
             from transformers import AutoConfig
             from accelerate import init_empty_weights
             from transformers.integrations import replace_with_bnb_linear
-            from transformers.models.qwen3_5 import Qwen3_5ForCausalLM
-            from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextRotaryEmbedding
             from safetensors import safe_open
 
             self.config_obj = AutoConfig.from_pretrained(str(model_dir))
@@ -728,22 +731,40 @@ class DistributedModel:
                 bnb_4bit_use_double_quant=True,
             )
 
-            with safe_open(self.sf_path, framework="pt", device="cpu") as f:
-                keys = f.keys()
-                if any(k.startswith("model.language_model.") for k in keys):
-                    self.prefix_base = "model.language_model."
-                else:
-                    self.prefix_base = "model."
+            if self.is_sharded:
+                with open(self.sf_index_path) as f:
+                    self.weight_map = json.load(f).get("weight_map", {})
+                sample_keys = list(self.weight_map.keys())
+            else:
+                with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+                    sample_keys = f.keys()
 
+            if any(k.startswith("model.language_model.") for k in sample_keys):
+                self.prefix_base = "model.language_model."
+            elif any(k.startswith("model.layers.") or k == "model.embed_tokens.weight" for k in sample_keys):
+                self.prefix_base = "model."
+            else:
+                self.prefix_base = ""
+
+            model_type = self.config.get("model_type", "qwen3_5")
             with init_empty_weights():
-                self.model = Qwen3_5ForCausalLM(text_cfg)
+                if model_type == "qwen2":
+                    from transformers.models.qwen2 import Qwen2ForCausalLM
+                    from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
+                    self.model = Qwen2ForCausalLM(self.config_obj)
+                    self.rotary_emb = Qwen2RotaryEmbedding(self.config_obj)
+                else:
+                    from transformers.models.qwen3_5 import Qwen3_5ForCausalLM
+                    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextRotaryEmbedding
+                    self.model = Qwen3_5ForCausalLM(text_cfg)
+                    self.rotary_emb = Qwen3_5TextRotaryEmbedding(text_cfg)
+
             self.model = replace_with_bnb_linear(self.model, quantization_config=self.bnb_config)
 
             self.embedding = self.model.model.embed_tokens
             self.layers = list(self.model.model.layers)
             self.norm = self.model.model.norm
             self.lm_head = self.model.lm_head
-            self.rotary_emb = Qwen3_5TextRotaryEmbedding(text_cfg)
             self.local_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
             self.num_layers = len(self.layers)
@@ -867,81 +888,104 @@ class DistributedModel:
         self.assignments = {}
         self.is_distributed = False
 
+    def _get_tensor_from_sf(self, key, device="cpu"):
+        from safetensors import safe_open
+        if getattr(self, "is_sharded", False) and hasattr(self, "weight_map"):
+            if key in self.weight_map:
+                shard_path = self.model_dir / self.weight_map[key]
+                with safe_open(shard_path, framework="pt", device="cpu") as f:
+                    return f.get_tensor(key).to(device)
+            return None
+        elif self.sf_path.exists():
+            with safe_open(self.sf_path, framework="pt", device="cpu") as f:
+                if key in f.keys():
+                    return f.get_tensor(key).to(device)
+        return None
+
     def _lazy_load_layer(self, layer_idx: int, device: str = "cpu"):
         """Load a single 4-bit layer from safetensors into memory or onto device."""
         from accelerate import init_empty_weights
         from transformers.integrations import replace_with_bnb_linear
-        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DecoderLayer
-        from safetensors import safe_open
         import bitsandbytes as bnb
 
+        model_type = self.config.get("model_type", "qwen3_5")
         text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
+
         with init_empty_weights():
-            layer = Qwen3_5DecoderLayer(text_cfg, layer_idx=layer_idx)
+            if model_type == "qwen2":
+                from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
+                layer = Qwen2DecoderLayer(self.config_obj, layer_idx=layer_idx)
+            else:
+                from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DecoderLayer
+                layer = Qwen3_5DecoderLayer(text_cfg, layer_idx=layer_idx)
+
         layer = replace_with_bnb_linear(layer, quantization_config=self.bnb_config)
         layer.config = text_cfg
         prefix = f"{self.prefix_base}layers.{layer_idx}."
 
-        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
-            for name, param in layer.named_parameters():
-                full_k = prefix + name
-                if full_k in f.keys():
-                    t = f.get_tensor(full_k).to(device)
-                    parts = name.split(".")
-                    submod = layer
-                    for p in parts[:-1]:
-                        submod = getattr(submod, p)
-                    setattr(submod, parts[-1], torch.nn.Parameter(t, requires_grad=False))
+        for name, param in layer.named_parameters():
+            full_k = prefix + name
+            t = self._get_tensor_from_sf(full_k, device)
+            if t is not None:
+                parts = name.split(".")
+                submod = layer
+                for p in parts[:-1]:
+                    submod = getattr(submod, p)
+                setattr(submod, parts[-1], torch.nn.Parameter(t, requires_grad=False))
 
-            for name, mod in layer.named_modules():
-                if isinstance(mod, bnb.nn.Linear4bit):
-                    weight_k = prefix + name + ".weight"
-                    if weight_k in f.keys():
-                        w = f.get_tensor(weight_k).to(device)
-                        qs_dict = {}
-                        for suffix in [".absmax", ".nested_absmax", ".nested_quant_map", ".quant_map", ".quant_state.bitsandbytes__nf4"]:
-                            k = weight_k + suffix
-                            if k in f.keys():
-                                qs_dict[suffix[1:]] = f.get_tensor(k).to(device)
-                        p4bit = bnb.nn.Params4bit.from_prequantized(
-                            data=w,
-                            quantized_stats=qs_dict,
-                            requires_grad=False,
-                            device=device,
-                            module=mod,
-                        )
-                        mod.weight = p4bit
-                        mod._is_hf_initialized = True
+        for name, mod in layer.named_modules():
+            if isinstance(mod, bnb.nn.Linear4bit):
+                weight_k = prefix + name + ".weight"
+                w = self._get_tensor_from_sf(weight_k, device)
+                if w is not None:
+                    qs_dict = {}
+                    for suffix in [".absmax", ".nested_absmax", ".nested_quant_map", ".quant_map", ".quant_state.bitsandbytes__nf4"]:
+                        t = self._get_tensor_from_sf(weight_k + suffix, device)
+                        if t is not None:
+                            qs_dict[suffix[1:]] = t
+                    p4bit = bnb.nn.Params4bit.from_prequantized(
+                        data=w,
+                        quantized_stats=qs_dict,
+                        requires_grad=False,
+                        device=device,
+                        module=mod,
+                    )
+                    mod.weight = p4bit
+                    mod._is_hf_initialized = True
         return _move_module_to_device(layer, device)
 
     def _lazy_load_embed(self, device: str = "cpu"):
         """Load token embedding from safetensors."""
-        from safetensors import safe_open
         text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
         embed = torch.nn.Embedding(text_cfg.vocab_size, text_cfg.hidden_size)
-        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
-            t = f.get_tensor(f"{self.prefix_base}embed_tokens.weight").to(device)
+        t = self._get_tensor_from_sf(f"{self.prefix_base}embed_tokens.weight", device)
+        if t is not None:
             embed.weight = torch.nn.Parameter(t, requires_grad=False)
         return embed
 
     def _lazy_load_norm(self, device: str = "cpu"):
         """Load final RMSNorm from safetensors."""
-        from safetensors import safe_open
-        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNorm
+        model_type = self.config.get("model_type", "qwen3_5")
         text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
-        norm = Qwen3_5RMSNorm(text_cfg.hidden_size, eps=text_cfg.rms_norm_eps)
-        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
-            t = f.get_tensor(f"{self.prefix_base}norm.weight").to(device)
+        if model_type == "qwen2":
+            from transformers.models.qwen2.modeling_qwen2 import Qwen2RMSNorm
+            norm = Qwen2RMSNorm(text_cfg.hidden_size, eps=text_cfg.rms_norm_eps)
+        else:
+            from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNorm
+            norm = Qwen3_5RMSNorm(text_cfg.hidden_size, eps=text_cfg.rms_norm_eps)
+        t = self._get_tensor_from_sf(f"{self.prefix_base}norm.weight", device)
+        if t is not None:
             norm.weight = torch.nn.Parameter(t, requires_grad=False)
         return norm
 
     def _lazy_load_head(self, device: str = "cpu"):
-        """Load lm_head from safetensors."""
-        from safetensors import safe_open
+        """Load lm_head from safetensors (or tied embed_tokens)."""
         text_cfg = getattr(self.config_obj, 'text_config', self.config_obj)
         head = torch.nn.Linear(text_cfg.hidden_size, text_cfg.vocab_size, bias=False)
-        with safe_open(self.sf_path, framework="pt", device="cpu") as f:
-            t = f.get_tensor("lm_head.weight").to(device)
+        t = self._get_tensor_from_sf("lm_head.weight", device)
+        if t is None:
+            t = self._get_tensor_from_sf(f"{self.prefix_base}embed_tokens.weight", device)
+        if t is not None:
             head.weight = torch.nn.Parameter(t, requires_grad=False)
         return head
 

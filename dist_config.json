@@ -1,17 +1,19 @@
 {
   "model": {
-    "id": "Qwen/Qwen2.5-3B",
-    "name": "Qwen2.5 3B",
+    "id": "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen35B_uncensored_4bit",
+    "name": "Qwen 35B Uncensored (4-bit)",
     "type": "Dense",
-    "gb": 6.39
+    "gb": 18.8,
+    "force_quant": "4bit",
+    "note": "Local pre-quantized 4-bit NF4 abliterated uncensored model (~18.8 GB). Needs ~4.8 GB Master + ~14.8 GB Worker."
   },
-  "model_dir": "/media/vithurshan/vithu/llm/openGP/LoadTime/model_cache/models--Qwen--Qwen2.5-3B/snapshots/3aab1f1954e9cc14eb9509a215f9e5ca08227a9b",
-  "quant": "none",
+  "model_dir": "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen35B_uncensored_4bit",
+  "quant": "4bit",
   "nodes": {
-    "192.168.8.130:9900": {
-      "host": "192.168.8.130",
+    "10.8.100.23:9900": {
+      "host": "10.8.100.23",
       "port": 9900,
-      "hostname": "92e7fa81617e"
+      "hostname": "csetuf09"
     }
   }
 }

@@ -660,7 +660,7 @@ class Worker:
         # Save to disk while on CPU before moving to GPU
         self._save_component(comp_id, module, model_id)
 
-        module = module.to(self.device).eval()
+        module = _move_module_to_device(module, self.device).eval()
         self.components[comp_id] = module
         self.comp_types[comp_id] = comp_type
         self.kv_caches[comp_id] = None

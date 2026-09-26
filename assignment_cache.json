@@ -1,264 +1,303 @@
 {
   "Qwen/Qwen2.5-7B": {
     "default": {
-      "saved_at": "2026-09-01 14:59:29",
+      "saved_at": "2026-09-07 21:53:25",
       "num_layers": 28,
       "quant": "none",
       "assignments": [
-        {
-          "comp_id": "layer_0",
-          "type": "layer",
-          "layer_idx": 0,
-          "expert_idx": null,
-          "node_host": "192.168.1.101",
-          "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
-        },
-        {
-          "comp_id": "layer_1",
-          "type": "layer",
-          "layer_idx": 1,
-          "expert_idx": null,
-          "node_host": "192.168.1.101",
-          "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
-        },
         {
           "comp_id": "layer_2",
           "type": "layer",
           "layer_idx": 2,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_3",
           "type": "layer",
           "layer_idx": 3,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_4",
           "type": "layer",
           "layer_idx": 4,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_5",
           "type": "layer",
           "layer_idx": 5,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
-        },
-        {
-          "comp_id": "layer_6",
-          "type": "layer",
-          "layer_idx": 6,
-          "expert_idx": null,
-          "node_host": "192.168.1.101",
-          "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_7",
           "type": "layer",
           "layer_idx": 7,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_8",
           "type": "layer",
           "layer_idx": 8,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_9",
           "type": "layer",
           "layer_idx": 9,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_10",
           "type": "layer",
           "layer_idx": 10,
           "expert_idx": null,
-          "node_host": "192.168.1.101",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
-        },
-        {
-          "comp_id": "layer_11",
-          "type": "layer",
-          "layer_idx": 11,
-          "expert_idx": null,
-          "node_host": "192.168.1.101",
-          "node_port": 9900,
-          "node_hostname": "lab-pc-1",
-          "node_label": "lab-pc-1 (192.168.1.101:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_12",
           "type": "layer",
           "layer_idx": 12,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_13",
           "type": "layer",
           "layer_idx": 13,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_14",
           "type": "layer",
           "layer_idx": 14,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_15",
           "type": "layer",
           "layer_idx": 15,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_16",
           "type": "layer",
           "layer_idx": 16,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_17",
           "type": "layer",
           "layer_idx": 17,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_18",
           "type": "layer",
           "layer_idx": 18,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_19",
           "type": "layer",
           "layer_idx": 19,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_20",
           "type": "layer",
           "layer_idx": 20,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_21",
           "type": "layer",
           "layer_idx": 21,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_22",
           "type": "layer",
           "layer_idx": 22,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_23",
           "type": "layer",
           "layer_idx": 23,
           "expert_idx": null,
-          "node_host": "192.168.1.102",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "lab-pc-2",
-          "node_label": "lab-pc-2 (192.168.1.102:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_24",
+          "type": "layer",
+          "layer_idx": 24,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_25",
+          "type": "layer",
+          "layer_idx": 25,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_26",
+          "type": "layer",
+          "layer_idx": 26,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_27",
+          "type": "layer",
+          "layer_idx": 27,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         }
       ],
       "summary": [
-        "lab-pc-1 (192.168.1.101:9900): layers 0-11",
-        "lab-pc-2 (192.168.1.102:9900): layers 12-23",
-        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 24-27, embedding, lm_head + norm"
+        "csetuf09 (10.8.100.23:9900): layers 2-5, layers 7-10, layers 12-27",
+        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-1, layers 6, layers 11, embedding, lm_head + norm"
       ]
     }
   },
   "Qwen/Qwen2.5-3B": {
     "default": {
-      "saved_at": "2026-09-02 07:59:56",
+      "saved_at": "2026-09-02 16:45:19",
       "num_layers": 36,
       "quant": "none",
       "assignments": [
+        {
+          "comp_id": "layer_7",
+          "type": "layer",
+          "layer_idx": 7,
+          "expert_idx": null,
+          "node_host": "192.168.8.130",
+          "node_port": 9900,
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
+        },
+        {
+          "comp_id": "layer_8",
+          "type": "layer",
+          "layer_idx": 8,
+          "expert_idx": null,
+          "node_host": "192.168.8.130",
+          "node_port": 9900,
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
+        },
+        {
+          "comp_id": "layer_9",
+          "type": "layer",
+          "layer_idx": 9,
+          "expert_idx": null,
+          "node_host": "192.168.8.130",
+          "node_port": 9900,
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
+        },
+        {
+          "comp_id": "layer_10",
+          "type": "layer",
+          "layer_idx": 10,
+          "expert_idx": null,
+          "node_host": "192.168.8.130",
+          "node_port": 9900,
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
+        },
         {
           "comp_id": "attn_0",
           "type": "attention",
@@ -266,8 +305,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_1",
@@ -276,8 +315,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_2",
@@ -286,8 +325,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_3",
@@ -296,8 +335,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_4",
@@ -306,8 +345,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_5",
@@ -316,8 +355,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_6",
@@ -326,48 +365,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "attn_7",
-          "type": "attention",
-          "layer_idx": 7,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "attn_8",
-          "type": "attention",
-          "layer_idx": 8,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "attn_9",
-          "type": "attention",
-          "layer_idx": 9,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "attn_10",
-          "type": "attention",
-          "layer_idx": 10,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_11",
@@ -376,8 +375,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_12",
@@ -386,8 +385,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_13",
@@ -396,8 +395,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_14",
@@ -406,8 +405,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_15",
@@ -416,8 +415,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_16",
@@ -426,8 +425,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_17",
@@ -436,8 +435,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_18",
@@ -446,8 +445,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_19",
@@ -456,8 +455,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_20",
@@ -466,8 +465,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_21",
@@ -476,8 +475,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_22",
@@ -486,8 +485,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_23",
@@ -496,8 +495,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_24",
@@ -506,8 +505,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_25",
@@ -516,8 +515,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_26",
@@ -526,8 +525,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_27",
@@ -536,8 +535,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_28",
@@ -546,8 +545,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_29",
@@ -556,8 +555,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_30",
@@ -566,8 +565,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_31",
@@ -576,8 +575,8 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
           "comp_id": "attn_32",
@@ -586,356 +585,1629 @@
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
-          "comp_id": "layer_33",
-          "type": "layer",
+          "comp_id": "attn_33",
+          "type": "attention",
           "layer_idx": 33,
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
-          "comp_id": "layer_34",
-          "type": "layer",
+          "comp_id": "attn_34",
+          "type": "attention",
           "layer_idx": 34,
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         },
         {
-          "comp_id": "layer_35",
-          "type": "layer",
+          "comp_id": "attn_35",
+          "type": "attention",
           "layer_idx": 35,
           "expert_idx": null,
           "node_host": "192.168.8.130",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "shan-HP-EliteDesk-800-G1-DM",
+          "node_label": "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900)"
         }
       ],
       "summary": [
-        "92e7fa81617e (192.168.8.130:9900): layers 33-35, attn 0-32",
-        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-32(ffn only), embedding, lm_head + norm"
+        "shan-HP-EliteDesk-800-G1-DM (192.168.8.130:9900): layers 7-10, attn 0-6, attn 11-35",
+        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-6(ffn only), layers 11-35(ffn only), embedding, lm_head + norm"
       ]
     }
   },
   "HuggingFaceTB/SmolLM2-135M": {
     "default": {
-      "saved_at": "2026-09-02 07:50:47",
+      "saved_at": "2026-09-02 12:14:23",
       "num_layers": 30,
       "quant": "none",
       "assignments": [
-        {
-          "comp_id": "layer_0",
-          "type": "layer",
-          "layer_idx": 0,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_1",
-          "type": "layer",
-          "layer_idx": 1,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
         {
           "comp_id": "layer_2",
           "type": "layer",
           "layer_idx": 2,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.105.56",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_3",
-          "type": "layer",
-          "layer_idx": 3,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_4",
-          "type": "layer",
-          "layer_idx": 4,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.56:9900)"
         },
         {
           "comp_id": "layer_5",
           "type": "layer",
           "layer_idx": 5,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.105.57",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_6",
-          "type": "layer",
-          "layer_idx": 6,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.57:9900)"
         },
         {
           "comp_id": "layer_7",
           "type": "layer",
           "layer_idx": 7,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.105.57",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_8",
-          "type": "layer",
-          "layer_idx": 8,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.57:9900)"
         },
         {
           "comp_id": "layer_9",
           "type": "layer",
           "layer_idx": 9,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.105.58",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_10",
-          "type": "layer",
-          "layer_idx": 10,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_11",
-          "type": "layer",
-          "layer_idx": 11,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_12",
-          "type": "layer",
-          "layer_idx": 12,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_13",
-          "type": "layer",
-          "layer_idx": 13,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_14",
-          "type": "layer",
-          "layer_idx": 14,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_15",
-          "type": "layer",
-          "layer_idx": 15,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_16",
-          "type": "layer",
-          "layer_idx": 16,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_17",
-          "type": "layer",
-          "layer_idx": 17,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_18",
-          "type": "layer",
-          "layer_idx": 18,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_19",
-          "type": "layer",
-          "layer_idx": 19,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_20",
-          "type": "layer",
-          "layer_idx": 20,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_21",
-          "type": "layer",
-          "layer_idx": 21,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
-        },
-        {
-          "comp_id": "layer_22",
-          "type": "layer",
-          "layer_idx": 22,
-          "expert_idx": null,
-          "node_host": "192.168.8.130",
-          "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.58:9900)"
         },
         {
           "comp_id": "layer_23",
           "type": "layer",
           "layer_idx": 23,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.105.60",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.60:9900)"
+        },
+        {
+          "comp_id": "layer_18",
+          "type": "layer",
+          "layer_idx": 18,
+          "expert_idx": null,
+          "node_host": "10.8.105.59",
+          "node_port": 9900,
+          "node_hostname": "fyplabpc",
+          "node_label": "fyplabpc (10.8.105.59:9900)"
+        }
+      ],
+      "summary": [
+        "fyplabpc (10.8.105.56:9900): layers 2",
+        "fyplabpc (10.8.105.57:9900): layers 5, layers 7",
+        "fyplabpc (10.8.105.58:9900): layers 9",
+        "fyplabpc (10.8.105.60:9900): layers 23",
+        "fyplabpc (10.8.105.59:9900): layers 18",
+        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-1, layers 3-4, layers 6, layers 8, layers 10-17, layers 19-22, layers 24-29, embedding, lm_head + norm"
+      ]
+    }
+  },
+  "Qwen/Qwen2.5-7B-Instruct": {
+    "default": {
+      "saved_at": "2026-09-15 19:22:36",
+      "num_layers": 28,
+      "quant": "none",
+      "assignments": [
+        {
+          "comp_id": "layer_2",
+          "type": "layer",
+          "layer_idx": 2,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_3",
+          "type": "layer",
+          "layer_idx": 3,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_4",
+          "type": "layer",
+          "layer_idx": 4,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_5",
+          "type": "layer",
+          "layer_idx": 5,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_6",
+          "type": "layer",
+          "layer_idx": 6,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_7",
+          "type": "layer",
+          "layer_idx": 7,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_8",
+          "type": "layer",
+          "layer_idx": 8,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_9",
+          "type": "layer",
+          "layer_idx": 9,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_10",
+          "type": "layer",
+          "layer_idx": 10,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_11",
+          "type": "layer",
+          "layer_idx": 11,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_12",
+          "type": "layer",
+          "layer_idx": 12,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_13",
+          "type": "layer",
+          "layer_idx": 13,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_14",
+          "type": "layer",
+          "layer_idx": 14,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_15",
+          "type": "layer",
+          "layer_idx": 15,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_16",
+          "type": "layer",
+          "layer_idx": 16,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_17",
+          "type": "layer",
+          "layer_idx": 17,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_18",
+          "type": "layer",
+          "layer_idx": 18,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_19",
+          "type": "layer",
+          "layer_idx": 19,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_20",
+          "type": "layer",
+          "layer_idx": 20,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_21",
+          "type": "layer",
+          "layer_idx": 21,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_22",
+          "type": "layer",
+          "layer_idx": 22,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_23",
+          "type": "layer",
+          "layer_idx": 23,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_24",
           "type": "layer",
           "layer_idx": 24,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_25",
           "type": "layer",
           "layer_idx": 25,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_26",
           "type": "layer",
           "layer_idx": 26,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_27",
           "type": "layer",
           "layer_idx": 27,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        }
+      ],
+      "summary": [
+        "csetuf09 (10.8.100.23:9900): layers 2-27",
+        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-1, embedding, lm_head + norm"
+      ]
+    }
+  },
+  "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen27B_4": {
+    "default": {
+      "saved_at": "2026-09-17 18:08:22",
+      "num_layers": 64,
+      "quant": "4bit",
+      "assignments": [
+        {
+          "comp_id": "layer_1",
+          "type": "layer",
+          "layer_idx": 1,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_2",
+          "type": "layer",
+          "layer_idx": 2,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_3",
+          "type": "layer",
+          "layer_idx": 3,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_4",
+          "type": "layer",
+          "layer_idx": 4,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_5",
+          "type": "layer",
+          "layer_idx": 5,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_6",
+          "type": "layer",
+          "layer_idx": 6,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_7",
+          "type": "layer",
+          "layer_idx": 7,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_8",
+          "type": "layer",
+          "layer_idx": 8,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_9",
+          "type": "layer",
+          "layer_idx": 9,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_10",
+          "type": "layer",
+          "layer_idx": 10,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_11",
+          "type": "layer",
+          "layer_idx": 11,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_12",
+          "type": "layer",
+          "layer_idx": 12,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_13",
+          "type": "layer",
+          "layer_idx": 13,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_14",
+          "type": "layer",
+          "layer_idx": 14,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_15",
+          "type": "layer",
+          "layer_idx": 15,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_16",
+          "type": "layer",
+          "layer_idx": 16,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_17",
+          "type": "layer",
+          "layer_idx": 17,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_18",
+          "type": "layer",
+          "layer_idx": 18,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_19",
+          "type": "layer",
+          "layer_idx": 19,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_20",
+          "type": "layer",
+          "layer_idx": 20,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_21",
+          "type": "layer",
+          "layer_idx": 21,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_22",
+          "type": "layer",
+          "layer_idx": 22,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_23",
+          "type": "layer",
+          "layer_idx": 23,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_24",
+          "type": "layer",
+          "layer_idx": 24,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_25",
+          "type": "layer",
+          "layer_idx": 25,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_26",
+          "type": "layer",
+          "layer_idx": 26,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_27",
+          "type": "layer",
+          "layer_idx": 27,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_28",
           "type": "layer",
           "layer_idx": 28,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         },
         {
           "comp_id": "layer_29",
           "type": "layer",
           "layer_idx": 29,
           "expert_idx": null,
-          "node_host": "192.168.8.130",
+          "node_host": "10.8.100.23",
           "node_port": 9900,
-          "node_hostname": "92e7fa81617e",
-          "node_label": "92e7fa81617e (192.168.8.130:9900)"
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_30",
+          "type": "layer",
+          "layer_idx": 30,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_31",
+          "type": "layer",
+          "layer_idx": 31,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_32",
+          "type": "layer",
+          "layer_idx": 32,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_33",
+          "type": "layer",
+          "layer_idx": 33,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_34",
+          "type": "layer",
+          "layer_idx": 34,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_35",
+          "type": "layer",
+          "layer_idx": 35,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_36",
+          "type": "layer",
+          "layer_idx": 36,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_37",
+          "type": "layer",
+          "layer_idx": 37,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_38",
+          "type": "layer",
+          "layer_idx": 38,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_39",
+          "type": "layer",
+          "layer_idx": 39,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_40",
+          "type": "layer",
+          "layer_idx": 40,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_41",
+          "type": "layer",
+          "layer_idx": 41,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_42",
+          "type": "layer",
+          "layer_idx": 42,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_43",
+          "type": "layer",
+          "layer_idx": 43,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_44",
+          "type": "layer",
+          "layer_idx": 44,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_45",
+          "type": "layer",
+          "layer_idx": 45,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_46",
+          "type": "layer",
+          "layer_idx": 46,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_47",
+          "type": "layer",
+          "layer_idx": 47,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_48",
+          "type": "layer",
+          "layer_idx": 48,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_49",
+          "type": "layer",
+          "layer_idx": 49,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_50",
+          "type": "layer",
+          "layer_idx": 50,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_51",
+          "type": "layer",
+          "layer_idx": 51,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_52",
+          "type": "layer",
+          "layer_idx": 52,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_53",
+          "type": "layer",
+          "layer_idx": 53,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_54",
+          "type": "layer",
+          "layer_idx": 54,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_55",
+          "type": "layer",
+          "layer_idx": 55,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_56",
+          "type": "layer",
+          "layer_idx": 56,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_57",
+          "type": "layer",
+          "layer_idx": 57,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_58",
+          "type": "layer",
+          "layer_idx": 58,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_59",
+          "type": "layer",
+          "layer_idx": 59,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_60",
+          "type": "layer",
+          "layer_idx": 60,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_61",
+          "type": "layer",
+          "layer_idx": 61,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_62",
+          "type": "layer",
+          "layer_idx": 62,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_63",
+          "type": "layer",
+          "layer_idx": 63,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_0",
+          "type": "layer",
+          "layer_idx": 0,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
         }
       ],
       "summary": [
-        "92e7fa81617e (192.168.8.130:9900): layers 0-29",
+        "csetuf09 (10.8.100.23:9900): layers 0-63",
         "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: embedding, lm_head + norm"
+      ]
+    }
+  },
+  "/media/vithurshan/vithu/llm/openGP/LoadTime/qwen35B_uncensored_4bit": {
+    "default": {
+      "saved_at": "2026-09-26 20:04:31",
+      "num_layers": 68,
+      "quant": "4bit",
+      "assignments": [
+        {
+          "comp_id": "layer_12",
+          "type": "layer",
+          "layer_idx": 12,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_13",
+          "type": "layer",
+          "layer_idx": 13,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_14",
+          "type": "layer",
+          "layer_idx": 14,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_15",
+          "type": "layer",
+          "layer_idx": 15,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_16",
+          "type": "layer",
+          "layer_idx": 16,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_17",
+          "type": "layer",
+          "layer_idx": 17,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_18",
+          "type": "layer",
+          "layer_idx": 18,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_19",
+          "type": "layer",
+          "layer_idx": 19,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_20",
+          "type": "layer",
+          "layer_idx": 20,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_21",
+          "type": "layer",
+          "layer_idx": 21,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_22",
+          "type": "layer",
+          "layer_idx": 22,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_23",
+          "type": "layer",
+          "layer_idx": 23,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_24",
+          "type": "layer",
+          "layer_idx": 24,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_25",
+          "type": "layer",
+          "layer_idx": 25,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_26",
+          "type": "layer",
+          "layer_idx": 26,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_27",
+          "type": "layer",
+          "layer_idx": 27,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_28",
+          "type": "layer",
+          "layer_idx": 28,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_29",
+          "type": "layer",
+          "layer_idx": 29,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_30",
+          "type": "layer",
+          "layer_idx": 30,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_31",
+          "type": "layer",
+          "layer_idx": 31,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_32",
+          "type": "layer",
+          "layer_idx": 32,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_33",
+          "type": "layer",
+          "layer_idx": 33,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_34",
+          "type": "layer",
+          "layer_idx": 34,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_35",
+          "type": "layer",
+          "layer_idx": 35,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_36",
+          "type": "layer",
+          "layer_idx": 36,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_37",
+          "type": "layer",
+          "layer_idx": 37,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_38",
+          "type": "layer",
+          "layer_idx": 38,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_39",
+          "type": "layer",
+          "layer_idx": 39,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_40",
+          "type": "layer",
+          "layer_idx": 40,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_41",
+          "type": "layer",
+          "layer_idx": 41,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_42",
+          "type": "layer",
+          "layer_idx": 42,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_43",
+          "type": "layer",
+          "layer_idx": 43,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_44",
+          "type": "layer",
+          "layer_idx": 44,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_45",
+          "type": "layer",
+          "layer_idx": 45,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_46",
+          "type": "layer",
+          "layer_idx": 46,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_47",
+          "type": "layer",
+          "layer_idx": 47,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_48",
+          "type": "layer",
+          "layer_idx": 48,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_49",
+          "type": "layer",
+          "layer_idx": 49,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_50",
+          "type": "layer",
+          "layer_idx": 50,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_51",
+          "type": "layer",
+          "layer_idx": 51,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_52",
+          "type": "layer",
+          "layer_idx": 52,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_53",
+          "type": "layer",
+          "layer_idx": 53,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_54",
+          "type": "layer",
+          "layer_idx": 54,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_55",
+          "type": "layer",
+          "layer_idx": 55,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_56",
+          "type": "layer",
+          "layer_idx": 56,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_57",
+          "type": "layer",
+          "layer_idx": 57,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_58",
+          "type": "layer",
+          "layer_idx": 58,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_59",
+          "type": "layer",
+          "layer_idx": 59,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_60",
+          "type": "layer",
+          "layer_idx": 60,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_61",
+          "type": "layer",
+          "layer_idx": 61,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_62",
+          "type": "layer",
+          "layer_idx": 62,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_63",
+          "type": "layer",
+          "layer_idx": 63,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_64",
+          "type": "layer",
+          "layer_idx": 64,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_65",
+          "type": "layer",
+          "layer_idx": 65,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_66",
+          "type": "layer",
+          "layer_idx": 66,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "layer_67",
+          "type": "layer",
+          "layer_idx": 67,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        },
+        {
+          "comp_id": "lm_head",
+          "type": "lm_head",
+          "layer_idx": null,
+          "expert_idx": null,
+          "node_host": "10.8.100.23",
+          "node_port": 9900,
+          "node_hostname": "csetuf09",
+          "node_label": "csetuf09 (10.8.100.23:9900)"
+        }
+      ],
+      "summary": [
+        "csetuf09 (10.8.100.23:9900): layers 12-67, lm_head",
+        "Local: vithurshan-HP-250-G8-Notebook-PC + NVIDIA GeForce RTX 3060 Laptop GPU: layers 0-11, embedding"
       ]
     }
   }
